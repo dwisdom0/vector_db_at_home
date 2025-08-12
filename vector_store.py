@@ -61,7 +61,7 @@ class VectorStore:
 
         if arr.dtype != self.numpy_dtype:
             warnings.warn(
-                f"Expected an array with a dtype of {self.numpy_dtype}, but got an array of {arr.dtype}. Attempting to coerce to {self.numpy_dtype}"
+                f"Expected an array with a dtype of {self.numpy_dtype}, but got an array of {arr.dtype}. Coercing to {self.numpy_dtype}"
             )
         return arr.astype(np.float32)
 

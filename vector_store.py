@@ -1,6 +1,7 @@
 import sqlite3
 import warnings
 import numpy as np
+from faiss import IndexFlatIP
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -10,6 +11,9 @@ class VectorStore:
         self.db_path = db_path
         self.dim = dim
         self.numpy_dtype = np.float32
+        # TODO: maybe remove FAISS and just do the brute-force knn search myself
+        # https://gist.github.com/mdouze/a8c914eb8c5c8306194ea1da48a577d2
+        self.faiss_index = IndexFlatIP(self.dim)
 
         self.allowed_input_types = set(
             [
@@ -67,7 +71,7 @@ class VectorStore:
 
         return np.concat(
             [np.frombuffer(blob, dtype=self.numpy_dtype) for blob in blobs]
-        )
+        ).reshape(-1, self.dim)
 
     def ndarray_to_blobs(self, arr: np.ndarray) -> list[bytes]:
         if len(arr.shape) == 2:
@@ -107,3 +111,21 @@ class VectorStore:
         to_insert = [{"vec": v} for v in self.ndarray_to_blobs(arr)]
         with self.connect() as con:
             con.executemany("INSERT INTO vector (vec) VALUES (:vec)", to_insert)
+
+        self.faiss_index.add(arr.astype(np.float32).reshape(-1, self.dim))
+
+    def delete(self, ids: list[int]):
+        with self.connect() as con:
+            con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
+        self.faiss_index.remove_ids(ids)
+
+    def search(self, query: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+        # Since we're using FlatIndexIP (inner product),
+        # we want to maximize the distance metric rather than maximize it.
+        # It makes more sense to call it "similarity"
+        # as in "cosine similarity"
+        similarities, ids = self.faiss_index.search(query, k)
+
+        # Once I have metadata associated with vectors,
+        # I need to return the documents/metadata
+        return similarities, ids

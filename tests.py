@@ -1,0 +1,168 @@
+import os
+import numpy as np
+from vector_store import VectorStore
+from unittest import TestCase
+
+
+class TestVectorStore(TestCase):
+    def setUp(self):
+        # unit tests don't persist the schema if I use an in-memory sqlite db
+        # it seems like SQLAlchemy can do this with SQLite using a Session
+        # so theres's probably some way to do it
+
+        self.vs_path = "tmp_vector_test.sqlite3"
+        self.vs_dim = 10
+        self.vs = VectorStore(self.vs_path, self.vs_dim)
+
+    def tearDown(self):
+        super().tearDown()
+        os.remove(self.vs_path)
+
+    def test_insert_1(self):
+        self.assertEqual(self.vs.count(), 0)
+        arr = np.ones((self.vs_dim,), dtype=np.float32)
+        self.vs.insert(arr)
+        self.assertEqual(self.vs.count(), 1)
+
+    def test_insert_5(self):
+        self.assertEqual(self.vs.count(), 0)
+        arr = np.ones((5, self.vs_dim), dtype=np.float32)
+        self.vs.insert(arr)
+        self.assertEqual(self.vs.count(), 5)
+
+    def test_multiple_inserts(self):
+        self.assertEqual(self.vs.count(), 0)
+        loops = 3
+        size = 3
+        for _ in range(loops):
+            a = np.ones((size, self.vs_dim), dtype=np.float32)
+            self.vs.insert(a)
+        self.assertEqual(self.vs.count(), loops * size)
+
+    def test_insert_bad_shape(self):
+        self.assertEqual(self.vs.count(), 0)
+        a = np.ones((self.vs_dim + 1,), dtype=np.float32)
+        with self.assertRaises(ValueError):
+            self.vs.insert(a)
+        self.assertEqual(self.vs.count(), 0)
+
+    def test_insert_many_bad_shape(self):
+        self.assertEqual(self.vs.count(), 0)
+        a = np.ones((5, self.vs_dim + 1), dtype=np.float32)
+        with self.assertRaises(ValueError):
+            self.vs.insert(a)
+        self.assertEqual(self.vs.count(), 0)
+
+    def test_insert_most_dtypes(self):
+        total = 0
+
+        working_dtypes = set(
+            (
+                np.bool_,
+                np.int_,
+                np.int8,
+                np.int16,
+                np.int32,
+                np.int64,
+                np.float16,
+                np.float16,
+                np.float32,
+                np.float64,
+                np.uint,
+                np.uint8,
+                np.uint16,
+                np.uint32,
+                np.uint64,
+            )
+        ) - set((self.vs.numpy_dtype,))
+
+        for dtype in working_dtypes:
+            self.assertEqual(self.vs.count(), total)
+            a = np.ones((self.vs_dim), dtype=dtype)
+            with self.assertWarns(UserWarning):
+                self.vs.insert(a)
+            total += 1
+            self.assertEqual(self.vs.count(), total)
+
+        non_working_dtypes = set(
+            (
+                np.void,
+                np.str_,
+                np.complex64,
+                np.complex128,
+                np.bytes_,
+                np.object_,
+            )
+        )
+
+        for dtype in non_working_dtypes:
+            a = np.ones((self.vs_dim), dtype=dtype)
+            with self.assertRaises(ValueError):
+                self.vs.insert(a)
+
+        self.assertEqual(self.vs.count(), total)
+
+    def test_insert_many_most_dtypes(self):
+        total = 0
+
+        working_dtypes = set(
+            (
+                np.bool_,
+                np.int_,
+                np.int8,
+                np.int16,
+                np.int32,
+                np.int64,
+                np.float16,
+                np.float16,
+                np.float32,
+                np.float64,
+                np.uint,
+                np.uint8,
+                np.uint16,
+                np.uint32,
+                np.uint64,
+            )
+        ) - set((self.vs.numpy_dtype,))
+
+        num_vecs = 3
+
+        for dtype in working_dtypes:
+            self.assertEqual(self.vs.count(), total)
+            a = np.ones((num_vecs, self.vs_dim), dtype=dtype)
+            with self.assertWarns(UserWarning):
+                self.vs.insert(a)
+            total += num_vecs
+            self.assertEqual(self.vs.count(), total)
+
+        non_working_dtypes = set(
+            (
+                np.void,
+                np.str_,
+                np.complex64,
+                np.complex128,
+                np.bytes_,
+                np.object_,
+            )
+        )
+
+        for dtype in non_working_dtypes:
+            a = np.ones((num_vecs, self.vs_dim), dtype=dtype)
+            with self.assertRaises(ValueError):
+                self.vs.insert(a)
+
+        self.assertEqual(self.vs.count(), total)
+
+    def test_head_0(self):
+        self.assertEqual(self.vs.count(), 0)
+        self.assertIsNone(self.vs.head(0))
+
+    def test_head_1(self):
+        self.assertEqual(self.vs.count(), 0)
+        self.assertIsNone(self.vs.head(0))
+        a = np.ones((self.vs_dim,), dtype=np.float32)
+        self.vs.insert(a)
+        self.assertEqual(self.vs.count(), 1)
+        head_result = self.vs.head(1)
+        self.assertIsNotNone(head_result)
+        self.assertTrue(np.array_equal(head_result, a))  # type: ignore

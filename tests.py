@@ -13,25 +13,24 @@ class TestVectorStore(TestCase):
         self.vs_path = "tmp_vector_test.sqlite3"
         self.vs_dim = 10
         self.vs = VectorStore(self.vs_path, self.vs_dim)
+        self.assertEqual(self.vs.count(), 0)
+        self.assertIsNone(self.vs.head(0))
 
     def tearDown(self):
         super().tearDown()
         os.remove(self.vs_path)
 
     def test_insert_1(self):
-        self.assertEqual(self.vs.count(), 0)
         arr = np.ones((self.vs_dim,), dtype=np.float32)
         self.vs.insert(arr)
         self.assertEqual(self.vs.count(), 1)
 
     def test_insert_5(self):
-        self.assertEqual(self.vs.count(), 0)
         arr = np.ones((5, self.vs_dim), dtype=np.float32)
         self.vs.insert(arr)
         self.assertEqual(self.vs.count(), 5)
 
     def test_multiple_inserts(self):
-        self.assertEqual(self.vs.count(), 0)
         loops = 3
         size = 3
         for _ in range(loops):
@@ -40,14 +39,12 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), loops * size)
 
     def test_insert_bad_shape(self):
-        self.assertEqual(self.vs.count(), 0)
         a = np.ones((self.vs_dim + 1,), dtype=np.float32)
         with self.assertRaises(ValueError):
             self.vs.insert(a)
         self.assertEqual(self.vs.count(), 0)
 
     def test_insert_many_bad_shape(self):
-        self.assertEqual(self.vs.count(), 0)
         a = np.ones((5, self.vs_dim + 1), dtype=np.float32)
         with self.assertRaises(ValueError):
             self.vs.insert(a)
@@ -154,12 +151,9 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), total)
 
     def test_head_0(self):
-        self.assertEqual(self.vs.count(), 0)
         self.assertIsNone(self.vs.head(0))
 
     def test_head_1(self):
-        self.assertEqual(self.vs.count(), 0)
-        self.assertIsNone(self.vs.head(0))
         a = np.ones((self.vs_dim,), dtype=np.float32)
         self.vs.insert(a)
         self.assertEqual(self.vs.count(), 1)

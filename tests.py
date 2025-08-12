@@ -159,4 +159,33 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), 1)
         head_result = self.vs.head(1)
         self.assertIsNotNone(head_result)
+        self.assertTrue(np.array_equal(head_result, a.reshape(-1, self.vs_dim)))  # type: ignore
+
+    def test_head_5(self):
+        size = 5
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        self.vs.insert(a)
+        self.assertEqual(self.vs.count(), size)
+        head_result = self.vs.head(size)
+        self.assertIsNotNone(head_result)
         self.assertTrue(np.array_equal(head_result, a))  # type: ignore
+
+    def test_search(self):
+        a = np.eye(self.vs_dim, dtype=np.float32)
+        self.vs.insert(a)
+        self.assertEqual(self.vs.count(), self.vs_dim)
+
+        query = np.array([0, 0, 0, 0.5, 0, 0, 0, 0, 0, 1], dtype=np.float32).reshape(
+            -1, self.vs_dim
+        )
+
+        similarities, ids = self.vs.search(query, k=2)
+        self.assertTrue(np.array_equal(ids, np.array([[9, 3]], dtype=np.int64)))
+        self.assertTrue(
+            np.array_equal(similarities, np.array([[1.0, 0.5]], dtype=np.float32))
+        )
+
+    # TODO:
+    # VectorStore.remove()
+    # does remove() mess up the id column in sqlite?
+    # Add basis vectors, search, then remove some and search again

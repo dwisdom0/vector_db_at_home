@@ -14,14 +14,17 @@ class TestVectorStore(TestCase):
         self.vs_dim = 10
         self.vs = VectorStore(self.vs_path, self.vs_dim)
         self.assertEqual(self.vs.count(), 0)
-        self.assertIsNone(self.vs.head(0))
+
+    def tearDown(self):
+        os.remove(self.vs_path)
+        super().tearDown()
+
+    @staticmethod
+    def gen_docs(n: int) -> list[dict]:
+        return [{f"k{i}": f"v{i}"} for i in range(n)]
 
     def assertNumpyEqual(self, a, b):
         return self.assertTrue(np.array_equal(a, b))
-
-    def tearDown(self):
-        super().tearDown()
-        os.remove(self.vs_path)
 
     def test_insert_1(self):
         arr = np.ones((self.vs_dim,), dtype=np.float32)
@@ -154,24 +157,37 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), total)
 
     def test_head_0(self):
-        self.assertIsNone(self.vs.head(0))
+        self.assertEqual(self.vs.head(0), [])
 
     def test_head_1(self):
         a = np.ones((self.vs_dim,), dtype=np.float32)
-        self.vs.insert(a)
+        docs = [{"k1": "v1"}]
+        self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), 1)
         head_result = self.vs.head(1)
         self.assertIsNotNone(head_result)
-        self.assertNumpyEqual(head_result, a.reshape(-1, self.vs_dim))  # type: ignore
+        self.assertEqual(len(head_result), 1)
+
+        # can't just make the dict and do assertEqual
+        # b/c it will have a numpy array
+        self.assertEqual(head_result[0]["id"], 0)
+        self.assertNumpyEqual(head_result[0]["vec"], a.reshape(-1, self.vs_dim))
+        self.assertEqual(head_result[0]["doc"], docs[0])
 
     def test_head_5(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        self.vs.insert(a)
+        docs = self.gen_docs(size)
+        self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
         head_result = self.vs.head(size)
         self.assertIsNotNone(head_result)
-        self.assertNumpyEqual(head_result, a)  # type: ignore
+        self.assertEqual(len(head_result), size)
+
+        for i, res in enumerate(head_result):
+            self.assertEqual(res["id"], i)
+            self.assertNumpyEqual(res["vec"], a[i].reshape(-1, self.vs_dim))
+            self.assertEqual(res["doc"], docs[i])
 
     def test_search(self):
         a = np.eye(self.vs_dim, dtype=np.float32)
@@ -193,12 +209,21 @@ class TestVectorStore(TestCase):
     def test_load_from_existing(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        self.vs.insert(a)
+        docs = self.gen_docs(size)
+        self.vs.insert(a, docs)
 
         # make a new store using the sqlite db used by self.vs
         new = VectorStore(self.vs_path, self.vs_dim)
         self.assertEqual(new.count(), size)
-        self.assertNumpyEqual(new.head(size), np.ones((size, self.vs_dim)))  # type: ignore
+
+        head_result = new.head(size)
+        self.assertIsNotNone(head_result)
+        self.assertEqual(len(head_result), size)
+
+        for i, res in enumerate(head_result):
+            self.assertEqual(res["id"], i)
+            self.assertNumpyEqual(res["vec"], a[i].reshape(-1, self.vs_dim))
+            self.assertEqual(res["doc"], docs[i])
 
     def test_insert_doc(self):
         docs = [{"k1": "v1"}]
@@ -215,7 +240,7 @@ class TestVectorStore(TestCase):
 
     def test_insert_many_docs(self):
         size = 5
-        docs = [{f"k{i}": f"v{i}"} for i in range(size)]
+        docs = self.gen_docs(size)
         a = np.ones((size, self.vs_dim), dtype=np.float32)
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
@@ -228,6 +253,11 @@ class TestVectorStore(TestCase):
             self.assertEqual(ids.shape, (size,))
             self.assertEqual(set(ids), set(ids.tolist()))
         self.assertEqual(retrieved_docs, docs)
+
+    def test_remove(self):
+        a = np.ones((self.vs_dim), dtype=np.float32)
+        self.vs.insert(a)
+        self.assertEqual(self.vs.count(), 1)
 
     # TODO:
     # VectorStore.remove()

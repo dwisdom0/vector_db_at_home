@@ -96,6 +96,13 @@ class VectorStore:
             return [self.float32_row_vecs(a).tobytes() for a in arr]
         return [self.float32_row_vecs(arr).tobytes()]
 
+    @staticmethod
+    def parse_json(s: str | None) -> dict:
+        try:
+            return json.loads(s)  # type: ignore
+        except TypeError:
+            return dict()
+
     def count(self):
         # TODO: maybe manage this myself with a class variable
         with self.connect() as con:
@@ -103,14 +110,23 @@ class VectorStore:
         return res[0]
 
     # TODO: also tail probably
-    def head(self, n: int) -> np.ndarray | None:
+    def head(self, n: int) -> list[dict]:
         if self.count() == 0 or n == 0:
-            return None
+            return list()
         with self.connect() as con:
             rows = con.execute(
                 "SELECT * FROM vector ORDER BY id LIMIT ?", (n,)
             ).fetchall()
-        return self.blobs_to_ndarray([row["vec"] for row in rows])
+        to_return = []
+        for row in rows:
+            to_return.append(
+                {
+                    "id": row["id"],
+                    "vec": self.blobs_to_ndarray([row["vec"]]),
+                    "doc": self.parse_json(row["doc"]),
+                }
+            )
+        return to_return
 
     def insert(self, arr: np.ndarray, docs: list[dict] | None = None):
         vecs = self.float32_row_vecs(arr)
@@ -195,11 +211,6 @@ class VectorStore:
             rows = con.execute(
                 f"select id, doc from vector where id in ({placeholders})", ids_list
             ).fetchall()
-        docs = []
-        for row in rows:
-            if row["doc"] is not None:
-                docs.append(json.loads(row["doc"]))
-            else:
-                docs.append("")
+        docs = [self.parse_json(row["doc"]) for row in rows]
 
         return similarities, ids, docs

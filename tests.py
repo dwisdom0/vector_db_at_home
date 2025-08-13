@@ -180,7 +180,11 @@ class TestVectorStore(TestCase):
         )
 
         similarities, ids = self.vs.search(query, k=2)
+        # the best matching vector should be the 10th basis vector and then the 4th basis vector
+        # but 0-based indexing
         self.assertTrue(np.array_equal(ids, np.array([[9, 3]], dtype=np.int64)))
+        # these are the cosine similarities
+        # this is kind of misleading since I'm not normalizing the vectors at all
         self.assertTrue(
             np.array_equal(similarities, np.array([[1.0, 0.5]], dtype=np.float32))
         )

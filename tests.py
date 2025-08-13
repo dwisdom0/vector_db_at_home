@@ -16,6 +16,9 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), 0)
         self.assertIsNone(self.vs.head(0))
 
+    def assertNumpyEqual(self, a, b):
+        return self.assertTrue(np.array_equal(a, b))
+
     def tearDown(self):
         super().tearDown()
         os.remove(self.vs_path)
@@ -159,7 +162,7 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), 1)
         head_result = self.vs.head(1)
         self.assertIsNotNone(head_result)
-        self.assertTrue(np.array_equal(head_result, a.reshape(-1, self.vs_dim)))  # type: ignore
+        self.assertNumpyEqual(head_result, a.reshape(-1, self.vs_dim))  # type: ignore
 
     def test_head_5(self):
         size = 5
@@ -168,7 +171,7 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), size)
         head_result = self.vs.head(size)
         self.assertIsNotNone(head_result)
-        self.assertTrue(np.array_equal(head_result, a))  # type: ignore
+        self.assertNumpyEqual(head_result, a)  # type: ignore
 
     def test_search(self):
         a = np.eye(self.vs_dim, dtype=np.float32)
@@ -179,15 +182,13 @@ class TestVectorStore(TestCase):
             -1, self.vs_dim
         )
 
-        similarities, ids = self.vs.search(query, k=2)
+        similarities, ids, _ = self.vs.search(query, k=2)
         # the best matching vector should be the 10th basis vector and then the 4th basis vector
         # but 0-based indexing
-        self.assertTrue(np.array_equal(ids, np.array([[9, 3]], dtype=np.int64)))
+        self.assertNumpyEqual(ids, np.array([[9, 3]], dtype=np.int64))
         # these are the cosine similarities
         # this is kind of misleading since I'm not normalizing the vectors at all
-        self.assertTrue(
-            np.array_equal(similarities, np.array([[1.0, 0.5]], dtype=np.float32))
-        )
+        self.assertNumpyEqual(similarities, np.array([[1.0, 0.5]], dtype=np.float32))
 
     def test_load_from_existing(self):
         size = 5
@@ -197,7 +198,36 @@ class TestVectorStore(TestCase):
         # make a new store using the sqlite db used by self.vs
         new = VectorStore(self.vs_path, self.vs_dim)
         self.assertEqual(new.count(), size)
-        self.assertTrue(np.array_equal(new.head(size), np.ones((size, self.vs_dim))))  # type: ignore
+        self.assertNumpyEqual(new.head(size), np.ones((size, self.vs_dim)))  # type: ignore
+
+    def test_insert_doc(self):
+        docs = [{"k1": "v1"}]
+        a = np.ones((self.vs_dim,), dtype=np.float32)
+        self.vs.insert(a, docs)
+        self.assertEqual(self.vs.count(), 1)
+
+        similarities, ids, retrieved_docs = self.vs.search(a, k=1)
+        self.assertNumpyEqual(
+            similarities, np.array([[1 * self.vs_dim]], dtype=np.float32)
+        )
+        self.assertNumpyEqual(ids, np.array([[0]], dtype=np.float32))
+        self.assertEqual(retrieved_docs, docs)
+
+    def test_insert_many_docs(self):
+        size = 5
+        docs = [{f"k{i}": f"v{i}"} for i in range(size)]
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        self.vs.insert(a, docs)
+        self.assertEqual(self.vs.count(), size)
+
+        similarities, retrieved_ids, retrieved_docs = self.vs.search(a, k=size)
+        self.assertNumpyEqual(similarities, np.ones((size, size)) * self.vs_dim)
+        # don't know the order of the ids because all the vectors are the same
+        for ids in retrieved_ids:
+            self.assertEqual(ids.dtype, np.dtype(np.int64))
+            self.assertEqual(ids.shape, (size,))
+            self.assertEqual(set(ids), set(ids.tolist()))
+        self.assertEqual(retrieved_docs, docs)
 
     # TODO:
     # VectorStore.remove()

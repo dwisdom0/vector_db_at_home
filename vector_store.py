@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import warnings
@@ -72,7 +73,7 @@ class VectorStore:
         arr = self.blobs_to_ndarray([row["vec"] for row in rows])
         self.faiss_index.add_with_ids(arr, ids)  # type: ignore
 
-    def coerce_to_float32(self, arr: np.ndarray):
+    def float32_row_vecs(self, arr: np.ndarray):
         if arr.dtype not in self.allowed_input_types:
             raise ValueError(f"input vectors of dtype {arr.dtype} are not supported")
 
@@ -80,7 +81,7 @@ class VectorStore:
             warnings.warn(
                 f"Expected an array with a dtype of {self.numpy_dtype}, but got an array of {arr.dtype}. Coercing to {self.numpy_dtype}"
             )
-        return arr.astype(np.float32)
+        return arr.reshape(-1, self.dim).astype(self.numpy_dtype)
 
     def blobs_to_ndarray(self, blobs: list[bytes]) -> np.ndarray | None:
         if len(blobs) == 0:
@@ -92,8 +93,8 @@ class VectorStore:
 
     def ndarray_to_blobs(self, arr: np.ndarray) -> list[bytes]:
         if len(arr.shape) == 2:
-            return [self.coerce_to_float32(a).tobytes() for a in arr]
-        return [self.coerce_to_float32(arr).tobytes()]
+            return [self.float32_row_vecs(a).tobytes() for a in arr]
+        return [self.float32_row_vecs(arr).tobytes()]
 
     def count(self):
         # TODO: maybe manage this myself with a class variable
@@ -111,18 +112,16 @@ class VectorStore:
             ).fetchall()
         return self.blobs_to_ndarray([row["vec"] for row in rows])
 
-    def insert(self, arr: np.ndarray):
-        if len(arr.shape) == 2 and arr.shape[1] != self.dim:
+    def insert(self, arr: np.ndarray, docs: list[dict] | None = None):
+        vecs = self.float32_row_vecs(arr)
+        if vecs.shape[1] != self.dim:
             raise ValueError(
                 f"Cannot insert a vector shaped like {arr.shape} into a store that only holds vectors with {self.dim} elements"
             )
-        elif len(arr.shape) == 1 and arr.shape[0] != self.dim:
+
+        if docs is not None and len(docs) != vecs.shape[0]:
             raise ValueError(
-                f"Cannot insert a vector shaped like {arr.shape} into a store that only holds vectors with {self.dim} elements"
-            )
-        elif len(arr.shape) >= 3:
-            raise ValueError(
-                f"Expected a 2D array of row vectors to insert like (n, {self.dim})"
+                f"The number of vectors ({vecs.shape[0]}) does not match the number of documents ({len(docs)})"
             )
 
         with self.connect() as con:
@@ -131,9 +130,9 @@ class VectorStore:
             ).fetchone()
             # want the ids to be 0-indexed
             if row is None:
-                max_id = -1
+                start_id = 0
             else:
-                max_id = row["id"]
+                start_id = row["id"] + 1
 
         # can't use RETURNING inside executemany()
         # https://docs.python.org/3/library/sqlite3.html#sqlite3.Cursor.executemany
@@ -145,19 +144,27 @@ class VectorStore:
         #
         # or I manually insert ids like range(max_id, max_id + num_vecs)
         # which will leave holes in the id column if things get deleted but that's fine
-        to_insert = [
-            {"id": i, "vec": v}
-            for i, v in enumerate(self.ndarray_to_blobs(arr), start=max_id + 1)
-        ]
+        if docs is None:
+            to_insert = [
+                {"id": i, "vec": v, "doc": None}
+                for i, v in enumerate(self.ndarray_to_blobs(vecs), start=start_id)
+            ]
+        else:
+            to_insert = [
+                {"id": i, "vec": z[0], "doc": json.dumps(z[1])}
+                for i, z in enumerate(
+                    zip(self.ndarray_to_blobs(vecs), docs), start=start_id
+                )
+            ]
 
         with self.connect() as con:
             con.executemany(
-                "INSERT INTO vector (id, vec) VALUES (:id, :vec);",
+                "INSERT INTO vector (id, vec, doc) VALUES (:id, :vec, :doc);",
                 to_insert,
             )
 
         self.faiss_index.add_with_ids(
-            arr.astype(np.float32).reshape(-1, self.dim),
+            vecs,
             [values["id"] for values in to_insert],
         )  # type: ignore
 
@@ -167,13 +174,32 @@ class VectorStore:
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
         self.faiss_index.remove_ids(ids)
 
-    def search(self, query: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+    def search(
+        self, query: np.ndarray, k: int
+    ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+        q_vecs = self.float32_row_vecs(query)
         # Since we're using FlatIndexIP (inner product),
         # we want to maximize the distance metric rather than minimize it.
         # It makes more sense to call it "similarity"
         # as in "cosine similarity"
-        similarities, ids = self.faiss_index.search(query, k)  # type: ignore
+        # Also the function signatures on FAISS's self-modifying python wrapper classes are too complicated
+        # for the python type checker to figure out
+        similarities: np.ndarray
+        ids: np.ndarray
+        similarities, ids = self.faiss_index.search(q_vecs, k)  # type: ignore
 
-        # Once I have metadata associated with vectors,
-        # I need to return the documents/metadata
-        return similarities, ids
+        ids_list = ids.flatten().tolist()
+        placeholders = f"{','.join(['?' for _ in ids_list])}"
+
+        with self.connect() as con:
+            rows = con.execute(
+                f"select id, doc from vector where id in ({placeholders})", ids_list
+            ).fetchall()
+        docs = []
+        for row in rows:
+            if row["doc"] is not None:
+                docs.append(json.loads(row["doc"]))
+            else:
+                docs.append("")
+
+        return similarities, ids, docs

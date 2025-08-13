@@ -70,7 +70,7 @@ class VectorStore:
             rows = con.execute("SELECT id, vec FROM vector;").fetchall()
         ids = [row["id"] for row in rows]
         arr = self.blobs_to_ndarray([row["vec"] for row in rows])
-        self.faiss_index.add_with_ids(arr, ids)
+        self.faiss_index.add_with_ids(arr, ids)  # type: ignore
 
     def coerce_to_float32(self, arr: np.ndarray):
         if arr.dtype not in self.allowed_input_types:
@@ -159,7 +159,7 @@ class VectorStore:
         self.faiss_index.add_with_ids(
             arr.astype(np.float32).reshape(-1, self.dim),
             [values["id"] for values in to_insert],
-        )
+        )  # type: ignore
 
     # TODO: maybe I just shouldn't support delete()
     def delete(self, ids: list[int]):
@@ -172,7 +172,7 @@ class VectorStore:
         # we want to maximize the distance metric rather than minimize it.
         # It makes more sense to call it "similarity"
         # as in "cosine similarity"
-        similarities, ids = self.faiss_index.search(query, k)
+        similarities, ids = self.faiss_index.search(query, k)  # type: ignore
 
         # Once I have metadata associated with vectors,
         # I need to return the documents/metadata

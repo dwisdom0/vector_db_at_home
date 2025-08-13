@@ -197,7 +197,7 @@ class TestVectorStore(TestCase):
         # make a new store using the sqlite db used by self.vs
         new = VectorStore(self.vs_path, self.vs_dim)
         self.assertEqual(new.count(), size)
-        self.assertTrue(np.array_equal(new.head(size), np.ones((size, self.vs_dim))))
+        self.assertTrue(np.array_equal(new.head(size), np.ones((size, self.vs_dim))))  # type: ignore
 
     # TODO:
     # VectorStore.remove()

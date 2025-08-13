@@ -185,6 +185,16 @@ class TestVectorStore(TestCase):
             np.array_equal(similarities, np.array([[1.0, 0.5]], dtype=np.float32))
         )
 
+    def test_load_from_existing(self):
+        size = 5
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        self.vs.insert(a)
+
+        # make a new store using the sqlite db used by self.vs
+        new = VectorStore(self.vs_path, self.vs_dim)
+        self.assertEqual(new.count(), size)
+        self.assertTrue(np.array_equal(new.head(size), np.ones((size, self.vs_dim))))
+
     # TODO:
     # VectorStore.remove()
     # does remove() mess up the id column in sqlite?

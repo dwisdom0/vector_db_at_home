@@ -1,7 +1,8 @@
+import os
 import sqlite3
 import warnings
 import numpy as np
-from faiss import IndexFlatIP
+from faiss import IndexFlatIP, IndexIDMap
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -11,9 +12,6 @@ class VectorStore:
         self.db_path = db_path
         self.dim = dim
         self.numpy_dtype = np.float32
-        # TODO: maybe remove FAISS and just do the brute-force knn search myself
-        # https://gist.github.com/mdouze/a8c914eb8c5c8306194ea1da48a577d2
-        self.faiss_index = IndexFlatIP(self.dim)
 
         self.allowed_input_types = set(
             [
@@ -38,11 +36,23 @@ class VectorStore:
             ]
         )
 
-        with open("schema.sql", "r") as f:
-            schema_sql = f.read()
+        # TODO: maybe remove FAISS and just do the brute-force knn search myself
+        # https://gist.github.com/mdouze/a8c914eb8c5c8306194ea1da48a577d2
 
-        with self.connect() as con:
-            con.executescript(schema_sql)
+        # IndexFlat* doesn't support add_with_ids
+        # IndexIVF* does if I end up switching to that
+        # https://github.com/facebookresearch/faiss/wiki/Pre--and-post-processing#faiss-id-mapping
+        self.faiss_index = IndexIDMap(IndexFlatIP(self.dim))
+
+        if os.path.exists(self.db_path):
+            self.load_from_existing()
+
+        else:
+            with open("schema.sql", "r") as f:
+                schema_sql = f.read()
+
+            with self.connect() as con:
+                con.executescript(schema_sql)
 
     @contextmanager
     def connect(self):
@@ -54,6 +64,13 @@ class VectorStore:
         finally:
             con.commit()
             con.close()
+
+    def load_from_existing(self):
+        with self.connect() as con:
+            rows = con.execute("SELECT id, vec FROM vector;").fetchall()
+        ids = [row["id"] for row in rows]
+        arr = self.blobs_to_ndarray([row["vec"] for row in rows])
+        self.faiss_index.add_with_ids(arr, ids)
 
     def coerce_to_float32(self, arr: np.ndarray):
         if arr.dtype not in self.allowed_input_types:
@@ -108,12 +125,43 @@ class VectorStore:
                 f"Expected a 2D array of row vectors to insert like (n, {self.dim})"
             )
 
-        to_insert = [{"vec": v} for v in self.ndarray_to_blobs(arr)]
         with self.connect() as con:
-            con.executemany("INSERT INTO vector (vec) VALUES (:vec)", to_insert)
+            row = con.execute(
+                "SELECT id FROM vector ORDER BY id DESC LIMIT 1;"
+            ).fetchone()
+            # want the ids to be 0-indexed
+            if row is None:
+                max_id = -1
+            else:
+                max_id = row["id"]
 
-        self.faiss_index.add(arr.astype(np.float32).reshape(-1, self.dim))
+        # can't use RETURNING inside executemany()
+        # https://docs.python.org/3/library/sqlite3.html#sqlite3.Cursor.executemany
+        #
+        # the other option is to chunk into batches of 999
+        # (or look up max_variable_number for our current sqlite)
+        # and build a single insert for each batch with multiple VALUES like
+        # insert into vector (vec) values (?), (?), (?) ... returning id;
+        #
+        # or I manually insert ids like range(max_id, max_id + num_vecs)
+        # which will leave holes in the id column if things get deleted but that's fine
+        to_insert = [
+            {"id": i, "vec": v}
+            for i, v in enumerate(self.ndarray_to_blobs(arr), start=max_id + 1)
+        ]
 
+        with self.connect() as con:
+            con.executemany(
+                "INSERT INTO vector (id, vec) VALUES (:id, :vec);",
+                to_insert,
+            )
+
+        self.faiss_index.add_with_ids(
+            arr.astype(np.float32).reshape(-1, self.dim),
+            [values["id"] for values in to_insert],
+        )
+
+    # TODO: maybe I just shouldn't support delete()
     def delete(self, ids: list[int]):
         with self.connect() as con:
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
@@ -121,7 +169,7 @@ class VectorStore:
 
     def search(self, query: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
         # Since we're using FlatIndexIP (inner product),
-        # we want to maximize the distance metric rather than maximize it.
+        # we want to maximize the distance metric rather than minimize it.
         # It makes more sense to call it "similarity"
         # as in "cosine similarity"
         similarities, ids = self.faiss_index.search(query, k)

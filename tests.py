@@ -254,12 +254,42 @@ class TestVectorStore(TestCase):
             self.assertEqual(set(ids), set(ids.tolist()))
         self.assertEqual(retrieved_docs, docs)
 
-    def test_remove(self):
+    def test_delete(self):
         a = np.ones((self.vs_dim), dtype=np.float32)
-        self.vs.insert(a)
+        docs = self.gen_docs(1)
+        self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), 1)
 
-    # TODO:
-    # VectorStore.remove()
-    # does remove() mess up the id column in sqlite?
-    # Add basis vectors, search, then remove some and search again
+        self.vs.delete(ids=[0])
+
+        self.assertEqual(self.vs.count(), 0)
+        self.assertEqual(self.vs.head(), [])
+
+    def test_delete_many(self):
+        size = 5
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        docs = self.gen_docs(size)
+        self.vs.insert(a, docs)
+        self.assertEqual(self.vs.count(), size)
+
+        self.vs.delete(ids=list(range(size)))
+
+        self.assertEqual(self.vs.count(), 0)
+        self.assertEqual(self.vs.head(), [])
+
+    def test_delete_subset(self):
+        size = 5
+        del_size = 3
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        docs = self.gen_docs(size)
+        self.vs.insert(a, docs)
+        self.assertEqual(self.vs.count(), size)
+
+        self.vs.delete(list(range(size-1, size-del_size-1, -1)))
+
+        self.assertEqual(self.vs.count(), size - del_size)
+
+        head_result = self.vs.head()
+        for i, record in enumerate(head_result):
+            self.assertNumpyEqual(record['vec'], np.ones((1, self.vs_dim), dtype=np.float32))
+            self.assertEqual(record['doc'], {f"k{i}": f"v{i}"})

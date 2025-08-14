@@ -184,11 +184,10 @@ class VectorStore:
             [values["id"] for values in to_insert],
         )  # type: ignore
 
-    # TODO: maybe I just shouldn't support delete()
     def delete(self, ids: list[int]):
         with self.connect() as con:
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
-        self.faiss_index.remove_ids(ids)
+        self.faiss_index.remove_ids(np.array(ids))
 
     def search(
         self, query: np.ndarray, k: int
@@ -198,8 +197,8 @@ class VectorStore:
         # we want to maximize the distance metric rather than minimize it.
         # It makes more sense to call it "similarity"
         # as in "cosine similarity"
-        # Also the function signatures on FAISS's self-modifying python wrapper classes are too complicated
-        # for the python type checker to figure out
+        # Also the function signatures on FAISS's self-modifying python wrapper classes
+        # are too complicated for the python type checker to figure out
         similarities: np.ndarray
         ids: np.ndarray
         similarities, ids = self.faiss_index.search(q_vecs, k)  # type: ignore

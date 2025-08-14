@@ -6,6 +6,8 @@ import numpy as np
 from faiss import IndexFlatIP, IndexIDMap
 from pathlib import Path
 from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Optional
 
 
 class VectorStore:
@@ -191,25 +193,43 @@ class VectorStore:
 
     def search(
         self, query: np.ndarray, k: int
-    ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+    ) -> list[list[dict]]:
         q_vecs = self.float32_row_vecs(query)
         # Since we're using FlatIndexIP (inner product),
-        # we want to maximize the distance metric rather than minimize it.
-        # It makes more sense to call it "similarity"
-        # as in "cosine similarity"
-        # Also the function signatures on FAISS's self-modifying python wrapper classes
-        # are too complicated for the python type checker to figure out
-        similarities: np.ndarray
+        # largest "distances" will be the best matches
+        distanaces: np.ndarray
         ids: np.ndarray
-        similarities, ids = self.faiss_index.search(q_vecs, k)  # type: ignore
+        distances, ids = self.faiss_index.search(q_vecs, k)  # type: ignore
 
-        ids_list = ids.flatten().tolist()
-        placeholders = f"{','.join(['?' for _ in ids_list])}"
+        # If there are only 3 vectors in the index and you ask for 5,
+        # FAISS will fill in the final 2 ids wth -1 in the ids array
+        # like
+        # [[3, 1, 2, -1, -1]]
+        unique_ids = np.unique(ids).tolist()
+        placeholders = ','.join(['?' for id_ in unique_ids if id_ != -1])
 
         with self.connect() as con:
             rows = con.execute(
-                f"select id, doc from vector where id in ({placeholders})", ids_list
+                f"select id, vec, doc from vector where id in ({placeholders})", unique_ids
             ).fetchall()
-        docs = [self.parse_json(row["doc"]) for row in rows]
+        unique_results = {}
+        for row in rows:
+            unique_results[row['id']] = {
+                'id': int(row['id']),
+                'vec': self.blobs_to_ndarray([row['vec']])[0],
+                'doc': self.parse_json(row['doc']),
+             }
 
-        return similarities, ids, docs
+
+        # fil in a 2D list of dicts for the results
+        result = []
+        for i, r in enumerate(ids):
+            result_row = []
+            for j, id_ in enumerate(r):
+                result_row.append({
+                    **unique_results[id_],
+                    'distance': distances[i][j]
+                })
+            result.append(result_row)
+
+        return result

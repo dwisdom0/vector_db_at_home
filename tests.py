@@ -191,20 +191,31 @@ class TestVectorStore(TestCase):
 
     def test_search(self):
         a = np.eye(self.vs_dim, dtype=np.float32)
-        self.vs.insert(a)
+        docs = self.gen_docs(self.vs_dim)
+        self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), self.vs_dim)
 
         query = np.array([0, 0, 0, 0.5, 0, 0, 0, 0, 0, 1], dtype=np.float32).reshape(
             -1, self.vs_dim
         )
 
-        similarities, ids, _ = self.vs.search(query, k=2)
-        # the best matching vector should be the 10th basis vector and then the 4th basis vector
-        # but 0-based indexing
-        self.assertNumpyEqual(ids, np.array([[9, 3]], dtype=np.int64))
-        # these are the cosine similarities
-        # this is kind of misleading since I'm not normalizing the vectors at all
-        self.assertNumpyEqual(similarities, np.array([[1.0, 0.5]], dtype=np.float32))
+        search_results = self.vs.search(query, k=2)
+        # we had 1 query
+        self.assertEqual(len(search_results), 1)
+        # we asked for 2 results
+        self.assertEqual(len(search_results[0]), 2)
+
+        # the 10th basis vector should be the best match
+        # the next best match should be the 4th basis vector
+        for i, bv in enumerate([9, 3]):
+            self.assertEqual(search_results[0][i]['id'], bv)
+            self.assertNumpyEqual(
+              search_results[0][i]['vec'],
+              np.array([0]*bv + [1] + [0]*(self.vs_dim-bv-1), dtype=np.float32))
+            self.assertEqual(search_results[0][i]['doc'], {f'k{bv}': f'v{bv}'})
+
+        self.assertEqual(search_results[0][0]['distance'], np.float32(1))
+        self.assertEqual(search_results[0][1]['distance'], np.float32(0.5))
 
     def test_load_from_existing(self):
         size = 5
@@ -226,17 +237,20 @@ class TestVectorStore(TestCase):
             self.assertEqual(res["doc"], docs[i])
 
     def test_insert_doc(self):
-        docs = [{"k1": "v1"}]
         a = np.ones((self.vs_dim,), dtype=np.float32)
+        docs = self.gen_docs(1)
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), 1)
 
-        similarities, ids, retrieved_docs = self.vs.search(a, k=1)
-        self.assertNumpyEqual(
-            similarities, np.array([[1 * self.vs_dim]], dtype=np.float32)
-        )
-        self.assertNumpyEqual(ids, np.array([[0]], dtype=np.float32))
-        self.assertEqual(retrieved_docs, docs)
+        search_results = self.vs.search(a, k=1)
+        self.assertEqual(len(search_results), 1)
+        self.assertEqual(len(search_results[0]), 1)
+
+        self.assertEqual(search_results[0][0]['id'], 0)
+        self.assertNumpyEqual(search_results[0][0]['vec'], a)
+        self.assertEqual(search_results[0][0]['doc'], {"k0": "v0"})
+        self.assertEqual(search_results[0][0]['distance'], np.float32(self.vs_dim))
+
 
     def test_insert_many_docs(self):
         size = 5
@@ -245,14 +259,25 @@ class TestVectorStore(TestCase):
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
 
-        similarities, retrieved_ids, retrieved_docs = self.vs.search(a, k=size)
-        self.assertNumpyEqual(similarities, np.ones((size, size)) * self.vs_dim)
-        # don't know the order of the ids because all the vectors are the same
-        for ids in retrieved_ids:
-            self.assertEqual(ids.dtype, np.dtype(np.int64))
-            self.assertEqual(ids.shape, (size,))
-            self.assertEqual(set(ids), set(ids.tolist()))
-        self.assertEqual(retrieved_docs, docs)
+        search_results = self.vs.search(a[0], k=size)
+        # only had 1 query vector
+        self.assertEqual(len(search_results), 1)
+        # asked for size results
+        self.assertEqual(len(search_results[0]), size)
+
+        found = set()
+        for i in range(size):
+            for result in search_results[0]:
+              if result['id'] != i:
+                continue
+              self.assertTrue(i not in found)
+              found.add(i)
+              self.assertEqual(result['id'], i)
+              self.assertNumpyEqual(result['vec'], np.ones((self.vs_dim,), dtype=np.float32))
+              self.assertEqual(result['doc'], {f"k{i}": f"v{i}"})
+              self.assertEqual(result['distance'], np.float32(self.vs_dim))
+
+        self.assertEqual(found, set(list(range(size))))
 
     def test_delete(self):
         a = np.ones((self.vs_dim), dtype=np.float32)

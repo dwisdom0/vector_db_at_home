@@ -110,7 +110,7 @@ class VectorStore:
         return res[0]
 
     # TODO: also tail probably
-    def head(self, n: int) -> list[dict]:
+    def head(self, n: int=5) -> list[dict]:
         if self.count() == 0 or n == 0:
             return list()
         with self.connect() as con:

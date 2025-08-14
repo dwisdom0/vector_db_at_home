@@ -316,5 +316,6 @@ class TestVectorStore(TestCase):
 
         head_result = self.vs.head()
         for i, record in enumerate(head_result):
+            self.assertEqual(record['id'], i)
             self.assertNumpyEqual(record['vec'], np.ones((1, self.vs_dim), dtype=np.float32))
             self.assertEqual(record['doc'], {f"k{i}": f"v{i}"})

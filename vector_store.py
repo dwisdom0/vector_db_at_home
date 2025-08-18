@@ -94,9 +94,7 @@ class VectorStore:
         ).reshape(-1, self.dim)
 
     def ndarray_to_blobs(self, arr: np.ndarray) -> list[bytes]:
-        if len(arr.shape) == 2:
-            return [self.float32_row_vecs(a).tobytes() for a in arr]
-        return [self.float32_row_vecs(arr).tobytes()]
+        return [self.float32_row_vecs(a).tobytes() for a in arr]
 
     @staticmethod
     def parse_json(s: str | None) -> dict:

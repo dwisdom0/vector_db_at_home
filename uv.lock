@@ -104,7 +104,7 @@ wheels = [
 [[package]]
 name = "vector-db-at-home"
 version = "0.0.1"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "faiss-cpu" },
     { name = "numpy" },

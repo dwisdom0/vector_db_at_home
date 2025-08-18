@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from vector_store import VectorStore
+from vector_db_at_home.vector_store import VectorStore
 from unittest import TestCase
 
 

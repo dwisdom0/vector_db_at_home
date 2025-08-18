@@ -51,7 +51,7 @@ class VectorStore:
             self.load_from_existing()
 
         else:
-            with open("schema.sql", "r") as f:
+            with open(os.path.join(os.path.dirname(__file__), "schema.sql"), "r") as f:
                 schema_sql = f.read()
 
             with self.connect() as con:

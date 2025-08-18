@@ -127,6 +127,26 @@ class VectorStore:
             )
         return to_return
 
+    def insert_dicts(self, ds: list[dict]):
+        # expect certain keys
+        # {
+        #   "vec": np.ndarray
+        #   "doc": optional dict with whatever the user wants, must be json-seralizable
+        # }
+        vecs = []
+        docs = []
+        for d in ds:
+            vecs.append(d.get("vec", None))
+            # assert that the doc is json-serializable
+            try:
+                _ = json.dumps(d["doc"])
+            except TypeError as e:
+                raise TypeError(f"docs must be JSON serializable: {e}")
+            except KeyError:
+                pass
+            docs.append(d.get("doc", None))
+        self.insert(np.stack(vecs), docs)
+
     def insert(self, arr: np.ndarray, docs: list[dict] | None = None):
         vecs = self.float32_row_vecs(arr)
         if vecs.shape[1] != self.dim:

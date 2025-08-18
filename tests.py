@@ -310,12 +310,54 @@ class TestVectorStore(TestCase):
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
 
-        self.vs.delete(list(range(size-1, size-del_size-1, -1)))
+        self.vs.delete(list(range(size - 1, size - del_size - 1, -1)))
 
         self.assertEqual(self.vs.count(), size - del_size)
 
         head_result = self.vs.head()
         for i, record in enumerate(head_result):
-            self.assertEqual(record['id'], i)
-            self.assertNumpyEqual(record['vec'], np.ones((1, self.vs_dim), dtype=np.float32))
-            self.assertEqual(record['doc'], {f"k{i}": f"v{i}"})
+            self.assertEqual(record["id"], i)
+            self.assertNumpyEqual(
+                record["vec"], np.ones((1, self.vs_dim), dtype=np.float32)
+            )
+            self.assertEqual(record["doc"], {f"k{i}": f"v{i}"})
+
+    def test_insert_dicts_not_seralizable(self):
+        data = [{"vec": np.ones((1, self.vs_dim)), "doc": list}]
+        with self.assertRaises(TypeError):
+            self.vs.insert_dicts(data)
+
+    def test_insert_dict(self):
+        data = [{"vec": np.ones((1, self.vs_dim), dtype=np.float32)}]
+        self.vs.insert_dicts(data)
+        self.assertEqual(self.vs.count(), 1)
+
+    def test_insert_dicts(self):
+        size = 5
+        data = [
+            {
+                "vec": np.ones((1, self.vs_dim), dtype=np.float32),
+            }
+            for _ in range(size)
+        ]
+        self.vs.insert_dicts(data)
+        self.assertEqual(self.vs.count(), 5)
+
+    def test_insert_dict_doc(self):
+        data = [
+            {"vec": np.ones((1, self.vs_dim), dtype=np.float32), "doc": {"k0": "v0"}}
+        ]
+        self.vs.insert_dicts(data)
+        self.assertEqual(self.vs.count(), 1)
+
+    def test_insert_dicts_doc(self):
+        size = 5
+        data = [
+            {
+                "vec": np.ones((1, self.vs_dim), dtype=np.float32),
+                "doc": {f"k{i}": f"v{i}"},
+            }
+            for i in range(size)
+        ]
+        self.vs.insert_dicts(data)
+        self.assertEqual(self.vs.count(), 5)

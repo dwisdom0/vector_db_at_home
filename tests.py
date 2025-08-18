@@ -208,14 +208,17 @@ class TestVectorStore(TestCase):
         # the 10th basis vector should be the best match
         # the next best match should be the 4th basis vector
         for i, bv in enumerate([9, 3]):
-            self.assertEqual(search_results[0][i]['id'], bv)
+            self.assertEqual(search_results[0][i]["id"], bv)
             self.assertNumpyEqual(
-              search_results[0][i]['vec'],
-              np.array([0]*bv + [1] + [0]*(self.vs_dim-bv-1), dtype=np.float32))
-            self.assertEqual(search_results[0][i]['doc'], {f'k{bv}': f'v{bv}'})
+                search_results[0][i]["vec"],
+                np.array(
+                    [0] * bv + [1] + [0] * (self.vs_dim - bv - 1), dtype=np.float32
+                ),
+            )
+            self.assertEqual(search_results[0][i]["doc"], {f"k{bv}": f"v{bv}"})
 
-        self.assertEqual(search_results[0][0]['distance'], np.float32(1))
-        self.assertEqual(search_results[0][1]['distance'], np.float32(0.5))
+        self.assertEqual(search_results[0][0]["distance"], np.float32(1))
+        self.assertEqual(search_results[0][1]["distance"], np.float32(0.5))
 
     def test_load_from_existing(self):
         size = 5
@@ -246,11 +249,10 @@ class TestVectorStore(TestCase):
         self.assertEqual(len(search_results), 1)
         self.assertEqual(len(search_results[0]), 1)
 
-        self.assertEqual(search_results[0][0]['id'], 0)
-        self.assertNumpyEqual(search_results[0][0]['vec'], a)
-        self.assertEqual(search_results[0][0]['doc'], {"k0": "v0"})
-        self.assertEqual(search_results[0][0]['distance'], np.float32(self.vs_dim))
-
+        self.assertEqual(search_results[0][0]["id"], 0)
+        self.assertNumpyEqual(search_results[0][0]["vec"], a)
+        self.assertEqual(search_results[0][0]["doc"], {"k0": "v0"})
+        self.assertEqual(search_results[0][0]["distance"], np.float32(self.vs_dim))
 
     def test_insert_many_docs(self):
         size = 5
@@ -268,14 +270,16 @@ class TestVectorStore(TestCase):
         found = set()
         for i in range(size):
             for result in search_results[0]:
-              if result['id'] != i:
-                continue
-              self.assertTrue(i not in found)
-              found.add(i)
-              self.assertEqual(result['id'], i)
-              self.assertNumpyEqual(result['vec'], np.ones((self.vs_dim,), dtype=np.float32))
-              self.assertEqual(result['doc'], {f"k{i}": f"v{i}"})
-              self.assertEqual(result['distance'], np.float32(self.vs_dim))
+                if result["id"] != i:
+                    continue
+                self.assertTrue(i not in found)
+                found.add(i)
+                self.assertEqual(result["id"], i)
+                self.assertNumpyEqual(
+                    result["vec"], np.ones((self.vs_dim,), dtype=np.float32)
+                )
+                self.assertEqual(result["doc"], {f"k{i}": f"v{i}"})
+                self.assertEqual(result["distance"], np.float32(self.vs_dim))
 
         self.assertEqual(found, set(list(range(size))))
 

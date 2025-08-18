@@ -109,7 +109,7 @@ class VectorStore:
         return res[0]
 
     # TODO: tail
-    def head(self, n: int=5) -> list[dict]:
+    def head(self, n: int = 5) -> list[dict]:
         if self.count() == 0 or n == 0:
             return list()
         with self.connect() as con:
@@ -208,13 +208,11 @@ class VectorStore:
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
         self.faiss_index.remove_ids(np.array(ids))
 
-    def search(
-        self, query: np.ndarray, k: int
-    ) -> list[list[dict]]:
+    def search(self, query: np.ndarray, k: int) -> list[list[dict]]:
         q_vecs = self.float32_row_vecs(query)
         # Since we're using FlatIndexIP (inner product),
         # largest "distances" will be the best matches
-        distanaces: np.ndarray
+        distances: np.ndarray
         ids: np.ndarray
         distances, ids = self.faiss_index.search(q_vecs, k)  # type: ignore
 
@@ -223,30 +221,27 @@ class VectorStore:
         # like
         # [[3, 1, 2, -1, -1]]
         unique_ids = np.unique(ids).tolist()
-        placeholders = ','.join(['?' for id_ in unique_ids if id_ != -1])
+        placeholders = ",".join(["?" for id_ in unique_ids if id_ != -1])
 
         with self.connect() as con:
             rows = con.execute(
-                f"select id, vec, doc from vector where id in ({placeholders})", unique_ids
+                f"select id, vec, doc from vector where id in ({placeholders})",
+                unique_ids,
             ).fetchall()
         unique_results = {}
         for row in rows:
-            unique_results[row['id']] = {
-                'id': int(row['id']),
-                'vec': self.blobs_to_ndarray([row['vec']])[0],
-                'doc': self.parse_json(row['doc']),
-             }
-
+            unique_results[row["id"]] = {
+                "id": int(row["id"]),
+                "vec": self.blobs_to_ndarray([row["vec"]])[0],
+                "doc": self.parse_json(row["doc"]),
+            }
 
         # fil in a 2D list of dicts for the results
         result = []
         for i, r in enumerate(ids):
             result_row = []
             for j, id_ in enumerate(r):
-                result_row.append({
-                    **unique_results[id_],
-                    'distance': distances[i][j]
-                })
+                result_row.append({**unique_results[id_], "distance": distances[i][j]})
             result.append(result_row)
 
         return result

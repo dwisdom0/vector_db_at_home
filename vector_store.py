@@ -104,12 +104,11 @@ class VectorStore:
             return dict()
 
     def count(self):
-        # TODO: maybe manage this myself with a class variable
         with self.connect() as con:
             res = con.execute("SELECT count(*) FROM vector;").fetchone()
         return res[0]
 
-    # TODO: also tail probably
+    # TODO: tail
     def head(self, n: int=5) -> list[dict]:
         if self.count() == 0 or n == 0:
             return list()

@@ -371,6 +371,7 @@ class TestVectorStore(TestCase):
             if opt.startswith(opt_name):
                 max_vars = int(opt.replace(opt_name, ""))
         self.assertIsNotNone(max_vars)
+        assert max_vars is not None
 
         ids = list(range(max_vars + 1))
         with self.assertRaises(sqlite3.OperationalError):

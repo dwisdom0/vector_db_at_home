@@ -234,7 +234,7 @@ class VectorStore:
                 "doc": self.parse_json(row["doc"]),
             }
 
-        # fil in a 2D list of dicts for the results
+        # fill in a 2D list of dicts for the results
         result = []
         for i, r in enumerate(ids):
             result_row = []

@@ -6,8 +6,6 @@ import numpy as np
 from faiss import IndexFlatIP, IndexIDMap
 from pathlib import Path
 from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import Optional
 
 
 class VectorStore:

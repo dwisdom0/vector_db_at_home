@@ -203,6 +203,21 @@ class VectorStore:
 
     def delete(self, ids: list[int]):
         with self.connect() as con:
+            # https://sqlite.org/limits.html
+            # SQLite limits the number of placeholders
+            # some versions limit it to 999
+            # others ~32k
+            # can check SQLITE_MAX_VARIABLE_NUMBER if we want to be super safe
+            # other wise I think it's fine to just let it error
+            placeholders = ",".join(["?" for _ in ids])
+            count_result = con.execute(
+                f"select count(id) from vector where id in ({placeholders})", ids
+            ).fetchone()
+            if count_result[0] != len(ids):
+                warnings.warn(
+                    "At least one of the ids you're trying to delete doesn't exist in the database"
+                )
+
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
         self.faiss_index.remove_ids(np.array(ids))
 

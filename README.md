@@ -1,3 +1,3 @@
 Mom, can we have `milvus-lite`?
 
-No, there's an embedded vector database at home.
+No, we have an embedded vector database at home.

@@ -1,6 +1,8 @@
 import os
+import sqlite3
 import numpy as np
 from vector_db_at_home.vector_store import VectorStore
+from collections import Counter
 from unittest import TestCase
 
 
@@ -325,6 +327,54 @@ class TestVectorStore(TestCase):
                 record["vec"], np.ones((1, self.vs_dim), dtype=np.float32)
             )
             self.assertEqual(record["doc"], {f"k{i}": f"v{i}"})
+
+    def test_delete_mess_up_ids(self):
+        # try to mess up the ids by deleting things from the middle of the id range
+
+        # insert 5
+        self.vs.insert(
+            np.ones((5, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(5)))
+        )
+        self.assertEqual(5, self.vs.count())
+        # delete id 2, which will be in the middle
+        self.vs.delete([2])
+        self.assertEqual(self.vs.count(), 4)
+        # insert again
+        self.vs.insert(
+            np.ones((3, self.vs_dim), dtype=np.float32),
+            self.gen_docs(list(range(5, 8))),
+        )
+        self.assertEqual(self.vs.count(), 7)
+
+        # check that the ids in SQLite match up with the ids in the FAISS index
+        # should be 0, 1, 3, 4, 5, 6, 7
+        # missing 2 in the middle there
+        db_ids = Counter([r["id"] for r in self.vs.head(10)])
+        self.assertEqual(Counter([0, 1, 3, 4, 5, 6, 7]), db_ids)
+        # faiss should also have some -1 since we're asking for 10 results
+        # but there should only be 7 ids in the index
+        faiss_ids = Counter(
+            self.vs.faiss_index.search(np.ones((1, self.vs_dim)), 10)[1]  # type: ignore
+            .flatten()
+            .tolist()
+        )
+        self.assertEqual(Counter([0, 1, 3, 4, 5, 6, 7, -1, -1, -1]), faiss_ids)
+
+    def test_delete_too_many(self):
+        # delete more than SQLITE_MAX_VARIABLE_NUMBER
+        with self.vs.connect() as con:
+            rows = con.execute("pragma compile_options;").fetchall()
+            opts = [r["compile_options"] for r in rows]
+        opt_name = "MAX_VARIABLE_NUMBER="
+        max_vars = None
+        for opt in opts:
+            if opt.startswith(opt_name):
+                max_vars = int(opt.replace(opt_name, ""))
+        self.assertIsNotNone(max_vars)
+
+        ids = list(range(max_vars + 1))
+        with self.assertRaises(sqlite3.OperationalError):
+            self.vs.delete(ids)
 
     def test_insert_dicts_not_seralizable(self):
         data = [{"vec": np.ones((1, self.vs_dim)), "doc": list}]

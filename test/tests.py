@@ -20,8 +20,8 @@ class TestVectorStore(TestCase):
         super().tearDown()
 
     @staticmethod
-    def gen_docs(n: int) -> list[dict]:
-        return [{f"k{i}": f"v{i}"} for i in range(n)]
+    def gen_docs(ns: list) -> list[dict]:
+        return [{f"k{n}": f"v{n}"} for n in ns]
 
     def assertNumpyEqual(self, a, b):
         return self.assertTrue(np.array_equal(a, b))
@@ -177,7 +177,7 @@ class TestVectorStore(TestCase):
     def test_head_5(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(size)
+        docs = self.gen_docs(list(range(size)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
         head_result = self.vs.head(size)
@@ -191,7 +191,7 @@ class TestVectorStore(TestCase):
 
     def test_search(self):
         a = np.eye(self.vs_dim, dtype=np.float32)
-        docs = self.gen_docs(self.vs_dim)
+        docs = self.gen_docs(list(range(self.vs_dim)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), self.vs_dim)
 
@@ -223,7 +223,7 @@ class TestVectorStore(TestCase):
     def test_load_from_existing(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(size)
+        docs = self.gen_docs(list(range(size)))
         self.vs.insert(a, docs)
 
         # make a new store using the sqlite db used by self.vs
@@ -241,7 +241,7 @@ class TestVectorStore(TestCase):
 
     def test_insert_doc(self):
         a = np.ones((self.vs_dim,), dtype=np.float32)
-        docs = self.gen_docs(1)
+        docs = self.gen_docs([0])
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), 1)
 
@@ -256,7 +256,7 @@ class TestVectorStore(TestCase):
 
     def test_insert_many_docs(self):
         size = 5
-        docs = self.gen_docs(size)
+        docs = self.gen_docs(list(range(size)))
         a = np.ones((size, self.vs_dim), dtype=np.float32)
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
@@ -285,7 +285,7 @@ class TestVectorStore(TestCase):
 
     def test_delete(self):
         a = np.ones((self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(1)
+        docs = self.gen_docs([0])
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), 1)
 
@@ -297,7 +297,7 @@ class TestVectorStore(TestCase):
     def test_delete_many(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(size)
+        docs = self.gen_docs(list(range(size)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
 
@@ -310,7 +310,7 @@ class TestVectorStore(TestCase):
         size = 5
         del_size = 3
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(size)
+        docs = self.gen_docs(list(range(size)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
 

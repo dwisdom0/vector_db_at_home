@@ -258,3 +258,23 @@ class VectorStore:
             result.append(result_row)
 
         return result
+
+    def query_by_doc(self, path: list[str], value: str | int) -> list[dict]:
+        json_path = "$." + ".".join(path)
+
+        with self.connect() as con:
+            rows = con.execute(
+                """\
+                SELECT id, vec, doc
+                FROM vector
+                WHERE json_extract(doc, :json_path) = :value;""",
+                {"json_path": json_path, "value": value},
+            ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "vec": self.blobs_to_ndarray([r["vec"]]),
+                "doc": self.parse_json(r["doc"]),
+            }
+            for r in rows
+        ]

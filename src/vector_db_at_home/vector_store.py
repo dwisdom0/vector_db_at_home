@@ -3,7 +3,6 @@ import os
 import sqlite3
 import warnings
 import numpy as np
-from faiss import IndexFlatIP, IndexIDMap
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -12,7 +11,7 @@ class VectorStore:
     def __init__(self, db_path: str | Path, dim: int):
         self.db_path = db_path
         self.dim = dim
-        self.numpy_dtype = np.float32
+        self.vec_dtype = np.float32
 
         self.allowed_input_types = set(
             [
@@ -40,10 +39,68 @@ class VectorStore:
         # TODO: maybe remove FAISS and just do the brute-force knn search myself
         # https://gist.github.com/mdouze/a8c914eb8c5c8306194ea1da48a577d2
 
-        # IndexFlat* doesn't support add_with_ids
-        # IndexIVF* does if I end up switching to that
-        # https://github.com/facebookresearch/faiss/wiki/Pre--and-post-processing#faiss-id-mapping
-        self.faiss_index = IndexIDMap(IndexFlatIP(self.dim))
+        # I need to keep track of ids
+
+        # so I might need a lookup dict
+        # or I might need to make this like
+        # [[id, vec], [id, vec]]
+        # but I'm not sure I can do that in Numpy
+        # in a way that makes it easy to get all the vecs at once
+        # to do a search
+
+        # suggestion from Qwen3
+        #
+        # # Create structured array
+        # dtype = [('id', 'i4'), ('vec', 'f4', (128,))]  # 128-dimensional vectors
+        # vectors = np.array([
+        #     (1, np.random.rand(128)),
+        #     (2, np.random.rand(128)),
+        #     (3, np.random.rand(128)),
+        # ], dtype=dtype)
+
+        # # Access all vectors easily
+        # all_vectors = vectors['vec']  # Shape: (3, 128)
+
+        # # Access specific id
+        # specific_vector = vectors[vectors['id'] == 2]['vec'][0]
+
+        # # KNN search on all vectors
+        # # Example: find nearest neighbors
+        # distances = np.linalg.norm(all_vectors - target_vector, axis=1)
+        # nearest_idx = np.argsort(distances)[:k]
+
+        # another suggestion from Qwen3
+        #
+        # ids = np.array([1, 2, 3])
+        # vectors = np.array([
+        #     np.random.rand(128),
+        #     np.random.rand(128),
+        #     np.random.rand(128),
+        # ])
+
+        # # Easy access to all vectors for KNN
+        # all_vectors = vectors  # Shape: (3, 128)
+
+        # # Get vector by id
+        # def get_vector_by_id(id_val):
+        #     idx = np.where(ids == id_val)[0]
+        #     return vectors[idx[0]] if len(idx) > 0 else None
+
+        # # KNN search
+        # distances = np.linalg.norm(vectors - target_vector, axis=1)
+        # nearest_indices = np.argsort(distances)[:k]
+
+        # https://numpy.org/doc/stable/user/basics.rec.html#structured-arrays
+        # I'm going to go with the structured array approach
+        # maybe I should do polars dataframe or pandas dataframe instead
+        # the docs suggest xarray, pandas, and DataArray
+        # I would think vaex as well. I don't get why no one ever shouts out vaex.
+        # I mean, I've never used it so maybe there's some reason.
+        # I'll just do it this way and I can change it if it becomes a problem
+        self.structured_dtype = np.dtype(
+            [("id", np.uint64), ("vec", self.vec_dtype, self.dim)]
+        )
+        self.index = np.empty((1,), dtype=self.structured_dtype)
 
         if os.path.exists(self.db_path):
             self.load_from_existing()
@@ -69,26 +126,30 @@ class VectorStore:
     def load_from_existing(self):
         with self.connect() as con:
             rows = con.execute("SELECT id, vec FROM vector;").fetchall()
-        ids = [row["id"] for row in rows]
-        arr = self.blobs_to_ndarray([row["vec"] for row in rows])
-        self.faiss_index.add_with_ids(arr, ids)  # type: ignore
+        self.index = np.array(
+            [
+                (row["id"], np.frombuffer(row["vec"], dtype=self.vec_dtype))
+                for row in rows
+            ],
+            dtype=self.structured_dtype,
+        )
 
     def float32_row_vecs(self, arr: np.ndarray):
         if arr.dtype not in self.allowed_input_types:
             raise ValueError(f"input vectors of dtype {arr.dtype} are not supported")
 
-        if arr.dtype != self.numpy_dtype:
+        if arr.dtype != self.vec_dtype:
             warnings.warn(
-                f"Expected an array with a dtype of {self.numpy_dtype}, but got an array of {arr.dtype}. Coercing to {self.numpy_dtype}"
+                f"Expected an array with a dtype of {self.vec_dtype}, but got an array of {arr.dtype}. Coercing to {self.vec_dtype}"
             )
-        return arr.reshape(-1, self.dim).astype(self.numpy_dtype)
+        return arr.reshape(-1, self.dim).astype(self.vec_dtype)
 
     def blobs_to_ndarray(self, blobs: list[bytes]) -> np.ndarray | None:
         if len(blobs) == 0:
             return None
 
         return np.concat(
-            [np.frombuffer(blob, dtype=self.numpy_dtype) for blob in blobs]
+            [np.frombuffer(blob, dtype=self.vec_dtype) for blob in blobs]
         ).reshape(-1, self.dim)
 
     def ndarray_to_blobs(self, arr: np.ndarray) -> list[bytes]:
@@ -177,6 +238,10 @@ class VectorStore:
         #
         # or I manually insert ids like range(max_id, max_id + num_vecs)
         # which will leave holes in the id column if things get deleted but that's fine
+
+        # TODO: clean this up a bit
+        # 1. reduce repeated code
+        # 2. don't convert to bytes and back to numpy several times
         if docs is None:
             to_insert = [
                 {"id": i, "vec": v, "doc": None}
@@ -196,10 +261,18 @@ class VectorStore:
                 to_insert,
             )
 
-        self.faiss_index.add_with_ids(
-            vecs,
-            [values["id"] for values in to_insert],
-        )  # type: ignore
+        self.index = np.concat(
+            [
+                self.index,
+                np.array(
+                    [
+                        (row["id"], np.frombuffer(row["vec"], dtype=self.vec_dtype))
+                        for row in to_insert
+                    ],
+                    dtype=self.structured_dtype,
+                ),
+            ]
+        )
 
     def delete(self, ids: list[int]):
         with self.connect() as con:

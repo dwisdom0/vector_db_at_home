@@ -79,7 +79,7 @@ class TestVectorStore(TestCase):
                 np.uint32,
                 np.uint64,
             )
-        ) - set((self.vs.numpy_dtype,))
+        ) - set((self.vs.vec_dtype,))
 
         for dtype in working_dtypes:
             self.assertEqual(self.vs.count(), total)
@@ -128,7 +128,7 @@ class TestVectorStore(TestCase):
                 np.uint32,
                 np.uint64,
             )
-        ) - set((self.vs.numpy_dtype,))
+        ) - set((self.vs.vec_dtype,))
 
         num_vecs = 3
 

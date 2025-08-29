@@ -257,7 +257,7 @@ class VectorStore:
         search_ids = []
         search_distances = []
         for q_vec in q_vecs:
-            distances = np.linalg.norm(self.index["vec"] - q_vec, axis=1)
+            distances = np.linalg.norm(self.index["vec"] - q_vec, ord=2, axis=1)
             search_distances.append(distances)
             search_ids.append(np.argsort(distances)[:k])
         search_ids = np.array(search_ids)

@@ -292,7 +292,7 @@ class VectorStore:
                 )
 
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
-        self.faiss_index.remove_ids(np.array(ids))
+        self.index = self.index[~np.isin(self.index["id"], ids)]
 
     def search(self, query: np.ndarray, k: int) -> list[list[dict]]:
         q_vecs = self.float32_row_vecs(query)

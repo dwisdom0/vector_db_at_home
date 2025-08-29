@@ -100,7 +100,7 @@ class VectorStore:
         self.structured_dtype = np.dtype(
             [("id", np.uint64), ("vec", self.vec_dtype, self.dim)]
         )
-        self.index = np.empty((1,), dtype=self.structured_dtype)
+        self.index = np.empty((0,), dtype=self.structured_dtype)
 
         if os.path.exists(self.db_path):
             self.load_from_existing()

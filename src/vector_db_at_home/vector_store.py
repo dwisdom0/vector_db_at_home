@@ -37,60 +37,6 @@ class VectorStore:
             ]
         )
 
-        # TODO: maybe remove FAISS and just do the brute-force knn search myself
-        # https://gist.github.com/mdouze/a8c914eb8c5c8306194ea1da48a577d2
-
-        # I need to keep track of ids
-
-        # so I might need a lookup dict
-        # or I might need to make this like
-        # [[id, vec], [id, vec]]
-        # but I'm not sure I can do that in Numpy
-        # in a way that makes it easy to get all the vecs at once
-        # to do a search
-
-        # suggestion from Qwen3
-        #
-        # # Create structured array
-        # dtype = [('id', 'i4'), ('vec', 'f4', (128,))]  # 128-dimensional vectors
-        # vectors = np.array([
-        #     (1, np.random.rand(128)),
-        #     (2, np.random.rand(128)),
-        #     (3, np.random.rand(128)),
-        # ], dtype=dtype)
-
-        # # Access all vectors easily
-        # all_vectors = vectors['vec']  # Shape: (3, 128)
-
-        # # Access specific id
-        # specific_vector = vectors[vectors['id'] == 2]['vec'][0]
-
-        # # KNN search on all vectors
-        # # Example: find nearest neighbors
-        # distances = np.linalg.norm(all_vectors - target_vector, axis=1)
-        # nearest_idx = np.argsort(distances)[:k]
-
-        # another suggestion from Qwen3
-        #
-        # ids = np.array([1, 2, 3])
-        # vectors = np.array([
-        #     np.random.rand(128),
-        #     np.random.rand(128),
-        #     np.random.rand(128),
-        # ])
-
-        # # Easy access to all vectors for KNN
-        # all_vectors = vectors  # Shape: (3, 128)
-
-        # # Get vector by id
-        # def get_vector_by_id(id_val):
-        #     idx = np.where(ids == id_val)[0]
-        #     return vectors[idx[0]] if len(idx) > 0 else None
-
-        # # KNN search
-        # distances = np.linalg.norm(vectors - target_vector, axis=1)
-        # nearest_indices = np.argsort(distances)[:k]
-
         # https://numpy.org/doc/stable/user/basics.rec.html#structured-arrays
         # I'm going to go with the structured array approach
         # maybe I should do polars dataframe or pandas dataframe instead

@@ -2,7 +2,6 @@ import os
 import sqlite3
 import numpy as np
 from vector_db_at_home.vector_store import VectorStore
-from collections import Counter
 from unittest import TestCase
 
 

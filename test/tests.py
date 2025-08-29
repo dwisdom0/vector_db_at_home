@@ -219,8 +219,8 @@ class TestVectorStore(TestCase):
             )
             self.assertEqual(search_results[0][i]["doc"], {f"k{bv}": f"v{bv}"})
 
-        self.assertEqual(search_results[0][0]["distance"], np.float32(1))
-        self.assertEqual(search_results[0][1]["distance"], np.float32(0.5))
+        self.assertEqual(search_results[0][0]["distance"], np.float32(1.5))
+        self.assertEqual(search_results[0][1]["distance"], np.float32(1.5))
 
     def test_load_from_existing(self):
         size = 5
@@ -254,7 +254,7 @@ class TestVectorStore(TestCase):
         self.assertEqual(search_results[0][0]["id"], 0)
         self.assertNumpyEqual(search_results[0][0]["vec"], a)
         self.assertEqual(search_results[0][0]["doc"], {"k0": "v0"})
-        self.assertEqual(search_results[0][0]["distance"], np.float32(self.vs_dim))
+        self.assertEqual(search_results[0][0]["distance"], np.float32(0))
 
     def test_insert_many_docs(self):
         size = 5
@@ -281,7 +281,7 @@ class TestVectorStore(TestCase):
                     result["vec"], np.ones((self.vs_dim,), dtype=np.float32)
                 )
                 self.assertEqual(result["doc"], {f"k{i}": f"v{i}"})
-                self.assertEqual(result["distance"], np.float32(self.vs_dim))
+                self.assertEqual(result["distance"], np.float32(0))
 
         self.assertEqual(found, set(list(range(size))))
 
@@ -346,19 +346,13 @@ class TestVectorStore(TestCase):
         )
         self.assertEqual(self.vs.count(), 7)
 
-        # check that the ids in SQLite match up with the ids in the FAISS index
+        # check that the ids in SQLite match up with the ids in the NumPy index
         # should be 0, 1, 3, 4, 5, 6, 7
         # missing 2 in the middle there
-        db_ids = Counter([r["id"] for r in self.vs.head(10)])
-        self.assertEqual(Counter([0, 1, 3, 4, 5, 6, 7]), db_ids)
-        # faiss should also have some -1 since we're asking for 10 results
-        # but there should only be 7 ids in the index
-        faiss_ids = Counter(
-            self.vs.faiss_index.search(np.ones((1, self.vs_dim)), 10)[1]  # type: ignore
-            .flatten()
-            .tolist()
-        )
-        self.assertEqual(Counter([0, 1, 3, 4, 5, 6, 7, -1, -1, -1]), faiss_ids)
+        db_ids = sorted([r["id"] for r in self.vs.head(10)])
+        self.assertEqual([0, 1, 3, 4, 5, 6, 7], db_ids)
+        index_ids = sorted(self.vs.index["id"].flatten().tolist())
+        self.assertEqual(db_ids, index_ids)
 
     def test_delete_too_many(self):
         # delete more than SQLITE_MAX_VARIABLE_NUMBER
@@ -418,7 +412,9 @@ class TestVectorStore(TestCase):
         self.assertEqual(self.vs.count(), 5)
 
     def test_query_by_doc(self):
-        self.vs.insert(np.ones((3, self.vs_dim)), self.gen_docs(list(range(3))))
+        self.vs.insert(
+            np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))
+        )
         results = self.vs.query_by_doc(["k1"], "v1")
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], 1)

@@ -295,18 +295,31 @@ class VectorStore:
         self.index = self.index[~np.isin(self.index["id"], ids)]
 
     def search(self, query: np.ndarray, k: int) -> list[list[dict]]:
-        q_vecs = self.float32_row_vecs(query)
-        # Since we're using FlatIndexIP (inner product),
-        # largest "distances" will be the best matches
-        distances: np.ndarray
-        ids: np.ndarray
-        distances, ids = self.faiss_index.search(q_vecs, k)  # type: ignore
+        if self.index is None:
+            return list(list(dict()))
 
-        # If there are only 3 vectors in the index and you ask for 5,
-        # FAISS will fill in the final 2 ids wth -1 in the ids array
-        # like
-        # [[3, 1, 2, -1, -1]]
-        unique_ids = np.unique(ids).tolist()
+        # TODO: handle k > len(self.index)
+        # FAISS handles this by padding the results list with -1
+        if k > len(self.index):
+            raise ValueError(
+                f"Asked for {k} results but there are only {len(self.index)} vectors in the index"
+            )
+        q_vecs = self.float32_row_vecs(query)
+
+        # TODO: vectorize this loop
+        search_ids = []
+        search_distances = []
+        for q_vec in q_vecs:
+            distances = np.linalg.norm(self.index["vec"] - q_vec, axis=1)
+            search_distances.append(distances)
+            search_ids.append(np.argsort(distances)[:k])
+        search_ids = np.array(search_ids)
+        search_distances = np.array(search_distances)
+
+        # it's possible that the same result could show up multiple times
+        # if there are multiple query vectors
+        # but we only want to get each result from the db once
+        unique_ids = np.unique(search_ids).tolist()
         placeholders = ",".join(["?" for id_ in unique_ids if id_ != -1])
 
         with self.connect() as con:
@@ -324,10 +337,12 @@ class VectorStore:
 
         # fill in a 2D list of dicts for the results
         result = []
-        for i, r in enumerate(ids):
+        for i, r in enumerate(search_ids):
             result_row = []
             for j, id_ in enumerate(r):
-                result_row.append({**unique_results[id_], "distance": distances[i][j]})
+                result_row.append(
+                    {**unique_results[id_], "distance": search_distances[i][j]}
+                )
             result.append(result_row)
 
         return result

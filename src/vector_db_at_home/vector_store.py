@@ -2,9 +2,10 @@ import json
 import os
 import sqlite3
 import warnings
-import numpy as np
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
+
+import numpy as np
 
 
 class VectorStore:

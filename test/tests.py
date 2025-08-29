@@ -1,8 +1,10 @@
 import os
 import sqlite3
-import numpy as np
-from vector_db_at_home.vector_store import VectorStore
 from unittest import TestCase
+
+import numpy as np
+
+from vector_db_at_home.vector_store import VectorStore
 
 
 class TestVectorStore(TestCase):

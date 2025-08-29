@@ -144,9 +144,9 @@ class VectorStore:
             )
         return arr.reshape(-1, self.dim).astype(self.vec_dtype)
 
-    def blobs_to_ndarray(self, blobs: list[bytes]) -> np.ndarray | None:
+    def blobs_to_ndarray(self, blobs: list[bytes]) -> np.ndarray:
         if len(blobs) == 0:
-            return None
+            return np.empty((0, 0), dtype=self.vec_dtype)
 
         return np.concat(
             [np.frombuffer(blob, dtype=self.vec_dtype) for blob in blobs]

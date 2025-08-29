@@ -220,8 +220,59 @@ class TestVectorStore(TestCase):
             )
             self.assertEqual(search_results[0][i]["doc"], {f"k{bv}": f"v{bv}"})
 
-        self.assertEqual(search_results[0][0]["distance"], np.float32(1.5))
-        self.assertEqual(search_results[0][1]["distance"], np.float32(1.5))
+        self.assertEqual(search_results[0][0]["distance"], np.float32(0.5))
+        self.assertEqual(search_results[0][1]["distance"], np.float32(1.118034))
+
+    def test_search_many_queries(self):
+        a = np.eye(self.vs_dim, dtype=np.float32)
+        docs = self.gen_docs(list(range(self.vs_dim)))
+        self.vs.insert(a, docs)
+        self.assertEqual(self.vs.count(), self.vs_dim)
+
+        qs = np.array(
+            [
+                [1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 0.5, 0, 0, 0, 0, 0, 0, 0],
+            ],
+            dtype=np.float32,
+        )
+
+        search_results = self.vs.search(qs, k=2)
+        # we had 2 queries
+        self.assertEqual(len(search_results), 2)
+        # we asked for 2 results
+        self.assertEqual(len(search_results[0]), 2)
+        self.assertEqual(len(search_results[1]), 2)
+
+        # first query
+        # the best match should be the first basis vector
+        # the next best should be the second basis vector
+        for i, bv in enumerate([0, 1]):
+            self.assertEqual(search_results[0][i]["id"], bv)
+            self.assertNumpyEqual(
+                search_results[0][i]["vec"],
+                np.array(
+                    [0] * bv + [1] + [0] * (self.vs_dim - bv - 1), dtype=np.float32
+                ),
+            )
+            self.assertEqual(search_results[0][i]["doc"], {f"k{bv}": f"v{bv}"})
+        self.assertEqual(search_results[0][0]["distance"], np.float32(0.5))
+        self.assertEqual(search_results[0][1]["distance"], np.float32(1.118034))
+
+        # second query
+        # the best match should be the second basis vector
+        # the next best should be the third basis vector
+        for i, bv in enumerate([1, 2]):
+            self.assertEqual(search_results[1][i]["id"], bv)
+            self.assertNumpyEqual(
+                search_results[1][i]["vec"],
+                np.array(
+                    [0] * bv + [1] + [0] * (self.vs_dim - bv - 1), dtype=np.float32
+                ),
+            )
+            self.assertEqual(search_results[1][i]["doc"], {f"k{bv}": f"v{bv}"})
+        self.assertEqual(search_results[1][0]["distance"], np.float32(0.5))
+        self.assertEqual(search_results[1][1]["distance"], np.float32(1.118034))
 
     def test_load_from_existing(self):
         size = 5

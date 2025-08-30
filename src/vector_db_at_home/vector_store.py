@@ -103,11 +103,18 @@ class VectorStore:
         return [self.float32_row_vecs(a).tobytes() for a in arr]
 
     @staticmethod
-    def parse_json(s: str | None) -> dict:
+    def json_parse(s: str | None) -> dict:
         try:
             return json.loads(s)  # type: ignore
         except TypeError:
             return dict()
+
+    @staticmethod
+    def json_dump(d: dict | None) -> str:
+        try:
+            return json.dumps(d)  # type: ignore
+        except TypeError:
+            return "{}"
 
     def count(self):
         with self.connect() as con:
@@ -128,7 +135,7 @@ class VectorStore:
                 {
                     "id": row["id"],
                     "vec": self.blobs_to_ndarray([row["vec"]]),
-                    "doc": self.parse_json(row["doc"]),
+                    "doc": self.json_parse(row["doc"]),
                 }
             )
         return to_return
@@ -186,21 +193,15 @@ class VectorStore:
         # or I manually insert ids like range(max_id, max_id + num_vecs)
         # which will leave holes in the id column if things get deleted but that's fine
 
-        # TODO: clean this up a bit
-        # 1. reduce repeated code
-        # 2. don't convert to bytes and back to numpy several times
+        blobs = self.ndarray_to_blobs(vecs)
+        ids = list(range(start_id, start_id + len(blobs)))
         if docs is None:
-            to_insert = [
-                {"id": i, "vec": v, "doc": None}
-                for i, v in enumerate(self.ndarray_to_blobs(vecs), start=start_id)
-            ]
-        else:
-            to_insert = [
-                {"id": i, "vec": z[0], "doc": json.dumps(z[1])}
-                for i, z in enumerate(
-                    zip(self.ndarray_to_blobs(vecs), docs), start=start_id
-                )
-            ]
+            docs = [dict()] * len(ids)
+        dumped_docs = [self.json_dump(doc) for doc in docs]
+
+        to_insert = [
+            {"id": i, "vec": v, "doc": d} for i, v, d in zip(ids, blobs, dumped_docs)
+        ]
 
         with self.connect() as con:
             con.executemany(
@@ -212,11 +213,7 @@ class VectorStore:
             [
                 self.index,
                 np.array(
-                    [
-                        (row["id"], np.frombuffer(row["vec"], dtype=self.vec_dtype))
-                        for row in to_insert
-                    ],
-                    dtype=self.structured_dtype,
+                    [(i, vec) for i, vec in zip(ids, vecs)], dtype=self.structured_dtype
                 ),
             ]
         )
@@ -285,7 +282,7 @@ class VectorStore:
             unique_results[row["id"]] = {
                 "id": int(row["id"]),
                 "vec": self.blobs_to_ndarray([row["vec"]])[0],
-                "doc": self.parse_json(row["doc"]),
+                "doc": self.json_parse(row["doc"]),
             }
 
         # fill in a 2D list of dicts for the results
@@ -315,7 +312,7 @@ class VectorStore:
             {
                 "id": r["id"],
                 "vec": self.blobs_to_ndarray([r["vec"]]),
-                "doc": self.parse_json(r["doc"]),
+                "doc": self.json_parse(r["doc"]),
             }
             for r in rows
         ]

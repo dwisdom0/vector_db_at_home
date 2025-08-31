@@ -37,10 +37,10 @@ jobs:
           activate-environment: true
 
       - name: "uv sync and test"
-        run: uv sync --locked --all-extras && uv -m unitest
+        run: uv sync --locked --all-extras && uv run -m unittest
 
       - name: "build release distributions"
-        run: uv bulid
+        run: uv build
 
   #     - name: Upload distributions
   #       uses: actions/upload-artifact@v4

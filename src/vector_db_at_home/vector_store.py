@@ -185,12 +185,7 @@ class VectorStore:
         # can't use RETURNING inside executemany()
         # https://docs.python.org/3/library/sqlite3.html#sqlite3.Cursor.executemany
         #
-        # the other option is to chunk into batches of 999
-        # (or look up max_variable_number for our current sqlite)
-        # and build a single insert for each batch with multiple VALUES like
-        # insert into vector (vec) values (?), (?), (?) ... returning id;
-        #
-        # or I manually insert ids like range(max_id, max_id + num_vecs)
+        # so I manually insert ids like range(max_id, max_id + num_vecs)
         # which will leave holes in the id column if things get deleted but that's fine
 
         blobs = self.ndarray_to_blobs(vecs)

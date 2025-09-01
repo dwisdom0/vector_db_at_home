@@ -59,6 +59,9 @@ class VectorStore:
             with self.connect() as con:
                 con.executescript(schema_sql)
 
+    def __repr__(self):
+        return f"VectorStore(db_path={self.db_path}, dim={self.dim})"
+
     @contextmanager
     def connect(self):
         con = sqlite3.connect(self.db_path)

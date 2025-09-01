@@ -474,3 +474,8 @@ class TestVectorStore(TestCase):
             results[0]["vec"], np.ones((1, self.vs_dim), dtype=np.float32)
         )
         self.assertEqual(results[0]["doc"], {"k1": "v1"})
+
+    def test_repr(self):
+        self.assertEqual(
+            str(self.vs), f"VectorStore(db_path={self.vs_path}, dim={self.vs_dim})"
+        )

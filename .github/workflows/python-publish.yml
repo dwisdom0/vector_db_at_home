@@ -6,13 +6,12 @@
 # separate terms of service, privacy policy, and support
 # documentation.
 
-name: Test uv build
+name: "Publish Python Package"
 
-# on:
-#   release:
-#     types: [published]
-
-on: [push]
+on:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read

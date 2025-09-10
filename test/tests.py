@@ -489,3 +489,10 @@ class TestVectorStore(TestCase):
         self.assertEqual(
             str(self.vs), f"VectorStore(db_path={self.vs_path}, dim={self.vs_dim})"
         )
+
+    def test_dump_vecs(self):
+        self.vs.insert(
+            np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))
+        )
+        result = self.vs.dump_vecs()
+        self.assertNumpyEqual(result, np.ones((3, self.vs_dim)))

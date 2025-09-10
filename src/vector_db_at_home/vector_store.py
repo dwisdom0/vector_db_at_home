@@ -316,3 +316,6 @@ class VectorStore:
             }
             for r in rows
         ]
+
+    def dump_vecs(self):
+        return self.index["vec"]

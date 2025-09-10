@@ -295,16 +295,18 @@ class VectorStore:
 
         return result
 
-    def query_by_doc(self, path: list[str], value: str | int) -> list[dict]:
+    def query_by_doc(self, path: list[str], values: list[str | int]) -> list[dict]:
         json_path = "$." + ".".join(path)
+
+        placeholders = ",".join(["?" for _ in range(len(values))])
 
         with self.connect() as con:
             rows = con.execute(
-                """\
+                f"""\
                 SELECT id, vec, doc
                 FROM vector
-                WHERE json_extract(doc, :json_path) = :value;""",
-                {"json_path": json_path, "value": value},
+                WHERE json_extract(doc, ?) in ({placeholders});""",
+                (json_path, *values),
             ).fetchall()
         return [
             {

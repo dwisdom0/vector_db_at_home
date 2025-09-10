@@ -463,17 +463,27 @@ class TestVectorStore(TestCase):
         self.vs.insert_dicts(data)
         self.assertEqual(self.vs.count(), 5)
 
-    def test_query_by_doc(self):
+    def test_query_doc(self):
         self.vs.insert(
             np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))
         )
-        results = self.vs.query_by_doc(["k1"], "v1")
+        results = self.vs.query_by_doc(["k1"], ["v1"])
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], 1)
         self.assertNumpyEqual(
             results[0]["vec"], np.ones((1, self.vs_dim), dtype=np.float32)
         )
         self.assertEqual(results[0]["doc"], {"k1": "v1"})
+
+    def test_query_many_doc(self):
+        docs = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}]
+        vecs = np.ones((len(docs), self.vs_dim), dtype=np.float32)
+        self.vs.insert(vecs, docs)
+        results = self.vs.query_by_doc(["id"], [2, 4])
+        self.assertEqual(len(results), 2)
+        docs = [r["doc"] for r in results]
+        self.assertIn({"id": 2}, docs)
+        self.assertIn({"id": 4}, docs)
 
     def test_repr(self):
         self.assertEqual(

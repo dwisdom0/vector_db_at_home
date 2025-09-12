@@ -496,3 +496,25 @@ class TestVectorStore(TestCase):
         )
         result = self.vs.dump_vecs()
         self.assertNumpyEqual(result, np.ones((3, self.vs_dim)))
+
+    def test_dump_vecs_order(self):
+        self.vs.insert(
+            np.array(
+                [[0] * self.vs_dim, [1] * self.vs_dim, [2] * self.vs_dim],
+                dtype=np.float32,
+            )
+        )
+        self.vs.delete([1])
+        r1 = self.vs.dump_vecs()
+        self.assertNumpyEqual(
+            r1, np.array([[0] * self.vs_dim, [2] * self.vs_dim], dtype=np.float32)
+        )
+        self.vs.insert(np.array([3] * self.vs_dim, dtype=np.float32))
+        r2 = self.vs.dump_vecs()
+        self.assertNumpyEqual(
+            r2,
+            np.array(
+                [[0] * self.vs_dim, [2] * self.vs_dim, [3] * self.vs_dim],
+                dtype=np.float32,
+            ),
+        )

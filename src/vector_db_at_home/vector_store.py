@@ -16,6 +16,14 @@ class SelectRecord:
     doc: dict
 
 
+@dataclass
+class SearchRecord:
+    id: int
+    vec: np.ndarray
+    doc: dict
+    distance: float
+
+
 class VectorStore:
     def __init__(self, db_path: str | Path, dim: int):
         self.db_path = db_path
@@ -263,7 +271,7 @@ class VectorStore:
             )
         return records
 
-    def search(self, query: np.ndarray, k: int) -> list[list[dict]]:
+    def search(self, query: np.ndarray, k: int) -> list[list[SearchRecord]]:
         if self.index is None:
             return list(list(dict()))
 
@@ -316,7 +324,7 @@ class VectorStore:
             result_row = []
             for j, id_ in enumerate(r):
                 result_row.append(
-                    {**unique_results[id_], "distance": search_distances[i][j]}
+                    SearchRecord(**unique_results[id_], distance=search_distances[i][j])
                 )
             result.append(result_row)
 

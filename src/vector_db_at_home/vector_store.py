@@ -3,9 +3,17 @@ import os
 import sqlite3
 import warnings
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+
+
+@dataclass
+class SelectRecord:
+    id: int
+    vec: np.ndarray
+    doc: dict
 
 
 class VectorStore:
@@ -235,6 +243,25 @@ class VectorStore:
 
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
         self.index = self.index[~np.isin(self.index["id"], ids)]
+
+    def select_ids(self, ids: list[int]) -> list[SelectRecord]:
+        placeholders = ",".join(["?" for _ in ids])
+        with self.connect() as con:
+            results = con.execute(
+                f"select id, vec, doc from vector where id in ({placeholders}) order by id;",
+                ids,
+            ).fetchall()
+
+        records = []
+        for result in results:
+            records.append(
+                SelectRecord(
+                    id=result["id"],
+                    vec=self.blobs_to_ndarray([result["vec"]]),
+                    doc=self.json_parse(result["doc"]),
+                )
+            )
+        return records
 
     def search(self, query: np.ndarray, k: int) -> list[list[dict]]:
         if self.index is None:

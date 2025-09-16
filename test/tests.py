@@ -490,6 +490,29 @@ class TestVectorStore(TestCase):
             str(self.vs), f"VectorStore(db_path={self.vs_path}, dim={self.vs_dim})"
         )
 
+    def test_select_ids(self):
+        self.vs.insert(
+            np.ones((5, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(5)))
+        )
+        ids = [1, 3]
+        result = self.vs.select_ids(ids)
+        self.assertEqual(len(result), 2)
+
+        for i, id_ in enumerate(ids):
+            self.assertEqual(result[i].id, id_)
+            self.assertNumpyEqual(
+                result[i].vec, np.ones((1, self.vs_dim), dtype=np.float32)
+            )
+            self.assertEqual(result[i].doc, {f"k{id_}": f"v{id_}"})
+
+    def test_select_bad_id(self):
+        self.vs.insert(
+            np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))
+        )
+        result = self.vs.select_ids([6])
+        self.assertEqual(len(result), 0)
+        self.assertEqual(result, [])
+
     def test_dump_vecs(self):
         self.vs.insert(
             np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))

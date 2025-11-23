@@ -330,7 +330,9 @@ class VectorStore:
 
         return result
 
-    def query_by_doc(self, path: list[str], values: list[str | int]) -> list[dict]:
+    def query_by_doc(
+        self, path: list[str], values: list[str | int]
+    ) -> list[SelectRecord]:
         json_path = "$." + ".".join(path)
 
         placeholders = ",".join(["?" for _ in range(len(values))])
@@ -344,11 +346,11 @@ class VectorStore:
                 (json_path, *values),
             ).fetchall()
         return [
-            {
-                "id": r["id"],
-                "vec": self.blobs_to_ndarray([r["vec"]]),
-                "doc": self.json_parse(r["doc"]),
-            }
+            SelectRecord(
+                id=r["id"],
+                vec=self.blobs_to_ndarray([r["vec"]]),
+                doc=self.json_parse(r["doc"]),
+            )
             for r in rows
         ]
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import rapidfuzz
 
 
 @dataclass
@@ -353,6 +354,51 @@ class VectorStore:
             )
             for r in rows
         ]
+
+    def search_by_doc(
+        self, query_docs: list[str | dict], k: int
+    ) -> list[list[SearchRecord]]:
+        if k <= 0:
+            raise ValueError(
+                "k, the number of search results for each query, must be a positive integer."
+            )
+
+        query_docs = [
+            self.json_dump(qd) if isinstance(qd, dict) else str(qd) for qd in query_docs
+        ]
+
+        with self.connect() as con:
+            rows = con.execute("SELECT id, vec, doc FROM vector;").fetchall()
+
+        docs = [r["doc"] for r in rows]
+
+        results = []
+        for query_doc in query_docs:
+            scores = rapidfuzz.process.extract(
+                query=query_doc,  # type: ignore
+                choices=docs,
+                scorer=rapidfuzz.fuzz.ratio,
+                limit=k,
+            )  # type: ignore
+            # extract() returns a list of tuples like
+            # (the string it found, the similarity score, the index of the string in the list of choices)
+            # it's a similarity score in the range 0-100
+            # so subtract it from 100 to get a distance
+            score_dists = [100 - s[1] for s in scores]
+            score_idxs = [s[2] for s in scores]
+            query_results = []
+            for score_dist, score_idx in zip(score_dists, score_idxs):
+                row = rows[score_idx]
+                query_results.append(
+                    SearchRecord(
+                        id=row["id"],
+                        vec=self.blobs_to_ndarray([row["vec"]])[0],
+                        doc=self.json_parse(row["doc"]),
+                        distance=score_dist,
+                    )
+                )
+            results.append(query_results)
+        return results
 
     def dump_vecs(self):
         return self.index["vec"]

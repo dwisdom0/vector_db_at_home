@@ -541,3 +541,77 @@ class TestVectorStore(TestCase):
                 dtype=np.float32,
             ),
         )
+
+    def test_search_by_doc(self):
+        size = 5
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        docs = self.gen_docs(list(range(size)))
+        self.vs.insert(a, docs)
+
+        res = self.vs.search_by_doc([{"1": "1"}], k=size)
+        self.assertEqual(len(res), 1)
+        self.assertEqual(len(res[0]), size)
+
+        # the best search result should be {"k1": "v1"}
+        self.assertEqual(res[0][0].id, 1)
+        self.assertNumpyEqual(
+            res[0][0].vec, np.ones((1, self.vs_dim), dtype=np.float32).flatten()
+        )
+        self.assertEqual(res[0][0].doc, {"k1": "v1"})
+        self.assertEqual(res[0][0].distance, 9.090909090909093)
+
+        for i in range(1, size):
+            self.assertNotEqual(res[0][i], {"k1": "v1"})
+            self.assertEqual(res[0][i].distance, 27.272727272727266)
+
+    def test_search_by_doc_multiple_queries(self):
+        size = 5
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        docs = self.gen_docs(list(range(size)))
+        self.vs.insert(a, docs)
+
+        res = self.vs.search_by_doc([{"k1": ""}, "v4"], k=3)
+        self.assertEqual(len(res), 2)
+        self.assertEqual(len(res[0]), 3)
+        self.assertEqual(len(res[1]), 3)
+
+        # check the results for the first query
+        self.assertEqual(res[0][0].id, 1)
+        self.assertNumpyEqual(
+            res[0][0].vec, np.ones((1, self.vs_dim), dtype=np.float32).flatten()
+        )
+        self.assertEqual(res[0][0].doc, {"k1": "v1"})
+        self.assertEqual(res[0][0].distance, 9.090909090909093)
+
+        self.assertNotEqual(res[0][1].doc, {"k1": "v1"})
+        self.assertEqual(res[0][1].distance, 18.181818181818187)
+
+        # check the results for the second query
+        self.assertEqual(res[1][0].id, 4)
+        self.assertNumpyEqual(
+            res[1][0].vec, np.ones((1, self.vs_dim), dtype=np.float32).flatten()
+        )
+        self.assertEqual(res[1][0].doc, {"k4": "v4"})
+        self.assertEqual(res[1][0].distance, 71.42857142857143)
+
+        self.assertNotEqual(res[1][1].doc, {"k4": "v4"})
+        self.assertEqual(res[1][1].distance, 85.71428571428571)
+
+    def test_search_by_doc_zero_results(self):
+        size = 5
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        docs = self.gen_docs(list(range(size)))
+        self.vs.insert(a, docs)
+
+        with self.assertRaises(ValueError):
+            _ = self.vs.search_by_doc([{"1": "1"}], k=0)
+
+    def test_search_by_doc_too_many_results(self):
+        size = 5
+        a = np.ones((size, self.vs_dim), dtype=np.float32)
+        docs = self.gen_docs(list(range(size)))
+        self.vs.insert(a, docs)
+
+        res = self.vs.search_by_doc([{"1": "1"}], k=size + 1)
+        self.assertEqual(len(res), 1)
+        self.assertEqual(len(res[0]), 5)

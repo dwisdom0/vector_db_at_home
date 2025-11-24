@@ -1,11 +1,12 @@
 [project]
 name = "vector-db-at-home"
-version = "0.0.2"
+version = "2.1.0"
 description = "vector db at home"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.3.2",
+    "rapidfuzz>=3.14.3",
 ]
 
 [build-system]

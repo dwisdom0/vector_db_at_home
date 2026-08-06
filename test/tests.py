@@ -62,25 +62,23 @@ class TestVectorStore(TestCase):
     def test_insert_most_dtypes(self):
         total = 0
 
-        working_dtypes = set(
-            (
-                np.bool_,
-                np.int_,
-                np.int8,
-                np.int16,
-                np.int32,
-                np.int64,
-                np.float16,
-                np.float16,
-                np.float32,
-                np.float64,
-                np.uint,
-                np.uint8,
-                np.uint16,
-                np.uint32,
-                np.uint64,
-            )
-        ) - set((self.vs.vec_dtype,))
+        working_dtypes = {
+            np.bool_,
+            np.int_,
+            np.int8,
+            np.int16,
+            np.int32,
+            np.int64,
+            np.float16,
+            np.float16,
+            np.float32,
+            np.float64,
+            np.uint,
+            np.uint8,
+            np.uint16,
+            np.uint32,
+            np.uint64,
+        } - {self.vs.vec_dtype}
 
         for dtype in working_dtypes:
             self.assertEqual(self.vs.count(), total)
@@ -90,16 +88,14 @@ class TestVectorStore(TestCase):
             total += 1
             self.assertEqual(self.vs.count(), total)
 
-        non_working_dtypes = set(
-            (
-                np.void,
-                np.str_,
-                np.complex64,
-                np.complex128,
-                np.bytes_,
-                np.object_,
-            )
-        )
+        non_working_dtypes = {
+            np.void,
+            np.str_,
+            np.complex64,
+            np.complex128,
+            np.bytes_,
+            np.object_,
+        }
 
         for dtype in non_working_dtypes:
             a = np.ones((self.vs_dim), dtype=dtype)
@@ -111,25 +107,23 @@ class TestVectorStore(TestCase):
     def test_insert_many_most_dtypes(self):
         total = 0
 
-        working_dtypes = set(
-            (
-                np.bool_,
-                np.int_,
-                np.int8,
-                np.int16,
-                np.int32,
-                np.int64,
-                np.float16,
-                np.float16,
-                np.float32,
-                np.float64,
-                np.uint,
-                np.uint8,
-                np.uint16,
-                np.uint32,
-                np.uint64,
-            )
-        ) - set((self.vs.vec_dtype,))
+        working_dtypes = {
+            np.bool_,
+            np.int_,
+            np.int8,
+            np.int16,
+            np.int32,
+            np.int64,
+            np.float16,
+            np.float16,
+            np.float32,
+            np.float64,
+            np.uint,
+            np.uint8,
+            np.uint16,
+            np.uint32,
+            np.uint64,
+        } - {self.vs.vec_dtype}
 
         num_vecs = 3
 
@@ -141,16 +135,14 @@ class TestVectorStore(TestCase):
             total += num_vecs
             self.assertEqual(self.vs.count(), total)
 
-        non_working_dtypes = set(
-            (
-                np.void,
-                np.str_,
-                np.complex64,
-                np.complex128,
-                np.bytes_,
-                np.object_,
-            )
-        )
+        non_working_dtypes = {
+            np.void,
+            np.str_,
+            np.complex64,
+            np.complex128,
+            np.bytes_,
+            np.object_,
+        }
 
         for dtype in non_working_dtypes:
             a = np.ones((num_vecs, self.vs_dim), dtype=dtype)
@@ -335,7 +327,7 @@ class TestVectorStore(TestCase):
                 self.assertEqual(result.doc, {f"k{i}": f"v{i}"})
                 self.assertEqual(result.distance, np.float32(0))
 
-        self.assertEqual(found, set(list(range(size))))
+        self.assertEqual(found, set(range(size)))
 
     def test_delete(self):
         a = np.ones((self.vs_dim), dtype=np.float32)

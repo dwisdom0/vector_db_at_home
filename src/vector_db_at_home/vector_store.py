@@ -26,34 +26,32 @@ class SearchRecord:
 
 
 class VectorStore:
-    def __init__(self, db_path: str | Path, dim: int, seed: int=4):
+    def __init__(self, db_path: str | Path, dim: int, seed: int = 4):
         self.rng = np.random.default_rng(seed=seed)
         self.db_path = db_path
         self.dim = dim
         self.vec_dtype = np.float32
 
-        self.allowed_input_types = set(
-            [
-                np.dtype(x)
-                for x in (
-                    np.bool_,
-                    np.int_,
-                    np.int8,
-                    np.int16,
-                    np.int32,
-                    np.int64,
-                    np.float16,
-                    np.float16,
-                    np.float32,
-                    np.float64,
-                    np.uint,
-                    np.uint8,
-                    np.uint16,
-                    np.uint32,
-                    np.uint64,
-                )
-            ]
-        )
+        self.allowed_input_types = {
+            np.dtype(x)
+            for x in (
+                np.bool_,
+                np.int_,
+                np.int8,
+                np.int16,
+                np.int32,
+                np.int64,
+                np.float16,
+                np.float16,
+                np.float32,
+                np.float64,
+                np.uint,
+                np.uint8,
+                np.uint16,
+                np.uint32,
+                np.uint64,
+            )
+        }
 
         # https://numpy.org/doc/stable/user/basics.rec.html#structured-arrays
         # I'm going to go with the structured array approach
@@ -73,7 +71,9 @@ class VectorStore:
         self.simhash_dtype = np.dtype(
             [("vec_id", np.uint64), ("hash", np.int8, self.dim)]
         )
-        self.simhash_hyperplanes = self.rng.normal(loc=0, scale=1, size=(self.simhash_bin_num, self.dim))
+        self.simhash_hyperplanes = self.rng.normal(
+            loc=0, scale=1, size=(self.simhash_bin_num, self.dim)
+        )
         self.simhash_idx = np.empty((0,), dtype=self.simhash_dtype)
 
         if os.path.exists(self.db_path):
@@ -144,8 +144,7 @@ class VectorStore:
         if self.index.shape[0] == 0:
             return
         # this is sort of backwards from the paper b/c my vectors are row vectors not column vectors
-        blah = np.sign(self.index['vec'] @ self.simhash_hyperplanes.T)
-
+        np.sign(self.index["vec"] @ self.simhash_hyperplanes.T)
 
     def float32_row_vecs(self, arr: np.ndarray):
         if arr.dtype not in self.allowed_input_types:
@@ -173,7 +172,7 @@ class VectorStore:
         try:
             return json.loads(s)  # type: ignore
         except TypeError:
-            return dict()
+            return {}
 
     @staticmethod
     def json_dump(d: dict | None) -> str:
@@ -190,7 +189,7 @@ class VectorStore:
     # TODO: tail
     def head(self, n: int = 5) -> list[dict]:
         if self.count() == 0 or n == 0:
-            return list()
+            return []
         with self.connect() as con:
             rows = con.execute(
                 "SELECT * FROM vector ORDER BY id LIMIT ?", (n,)
@@ -257,7 +256,7 @@ class VectorStore:
         blobs = self.ndarray_to_blobs(vecs)
         ids = list(range(start_id, start_id + len(blobs)))
         if docs is None:
-            docs = [dict()] * len(ids)
+            docs = [{}] * len(ids)
         dumped_docs = [self.json_dump(doc) for doc in docs]
 
         to_insert = [
@@ -320,7 +319,7 @@ class VectorStore:
 
     def search(self, query: np.ndarray, k: int) -> list[list[SearchRecord]]:
         if self.index is None:
-            return list(list(dict()))
+            return list({})
 
         # TODO: handle k > len(self.index)
         # FAISS handles this by padding the results list with -1
@@ -377,7 +376,9 @@ class VectorStore:
 
         return result
 
-    def search_random_projection(self, query: np.ndarray, k: int) -> list[list[SearchRecord]]:
+    def search_random_projection(
+        self, query: np.ndarray, k: int
+    ) -> list[list[SearchRecord]]:
         # SimHash
         # https://www.cs.princeton.edu/courses/archive/spring04/cos598B/bib/CharikarEstim.pdf
         # https://proceedings.mlr.press/v33/shrivastava14.pdf
@@ -389,13 +390,11 @@ class VectorStore:
         # and very similar to a project I did a while about where I used the frequncy counts of bytes as the embedding features
         # https://www.webrankinfo.com/dossiers/wp-content/uploads/simhash.pdf
 
-
         # index any docs we haven't indexed yet
         with self.connect() as con:
-            con.execute('select vec_id from index except select id as vec_id from vector;')
-        
-
-
+            con.execute(
+                "select vec_id from index except select id as vec_id from vector;"
+            )
 
     def query_by_doc(
         self, path: list[str], values: list[str | int]

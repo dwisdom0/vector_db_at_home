@@ -26,7 +26,8 @@ class SearchRecord:
 
 
 class VectorStore:
-    def __init__(self, db_path: str | Path, dim: int):
+    def __init__(self, db_path: str | Path, dim: int, seed: int=4):
+        self.rng = np.random.default_rng(seed=seed)
         self.db_path = db_path
         self.dim = dim
         self.vec_dtype = np.float32
@@ -66,6 +67,15 @@ class VectorStore:
         )
         self.index = np.empty((0,), dtype=self.structured_dtype)
 
+        # hardcode some random value
+        # use 10 hyperplanes
+        self.simhash_bin_num = 10
+        self.simhash_dtype = np.dtype(
+            [("vec_id", np.uint64), ("hash", np.int8, self.dim)]
+        )
+        self.simhash_hyperplanes = self.rng.normal(loc=0, scale=1, size=(self.simhash_bin_num, self.dim))
+        self.simhash_idx = np.empty((0,), dtype=self.simhash_dtype)
+
         if os.path.exists(self.db_path):
             self.load_from_existing()
 
@@ -75,6 +85,8 @@ class VectorStore:
 
             with self.connect() as con:
                 con.executescript(schema_sql)
+
+        self.build_simhash_idx()
 
     def __repr__(self):
         return f"VectorStore(db_path={self.db_path}, dim={self.dim})"
@@ -100,6 +112,40 @@ class VectorStore:
             ],
             dtype=self.structured_dtype,
         )
+
+    def build_simhash_idx(self):
+        # simhash actually seems not great
+        # idk I guess it's fine for this
+        # but it's not a faster search, you still have to do a sql query like
+        # select * from table
+        # where abs(hash - query_hash) < threshold
+        #
+        # maybe I should use ssdeep to get a hash
+        # like this is just for a default hashing right, it's not for speeding anything up?
+        # or is it to speed things up by checking the index first to limit the amount of stuff we search for ANN
+        # because I think we could use locality sensitive hashing for some stuff
+        # https://ssdeep-project.github.io/ssdeep/index.html
+        # python implementation here, it's super simple
+        # https://github.com/elceef/ppdeep/blob/master/ppdeep.py
+        #
+        # is that what I want? what do I want?
+        # I think I wanted to implement an approximate nearest neighrbors algorithm
+        # and get rid of the rapidfuzz dependency
+        # > To further enhance efficiency, ANN uses indexing structures like KD-trees, Locality-Sensitive Hashing (LSH) and Hierarchical Navigable Small World (HNSW).
+        # yeah so I could be using LSH for ANN
+        # probably the random projection LSH?
+        # maybe I should just work through each of those
+        # because I don't know now to build any of them so I want to learn how to build them
+        # LSH, KD-tree, and HNSW.
+        # I think I might need some way to generate kind of a lot of data somehow
+        # for load testing
+        # but I can figure that out later
+
+        if self.index.shape[0] == 0:
+            return
+        # this is sort of backwards from the paper b/c my vectors are row vectors not column vectors
+        blah = np.sign(self.index['vec'] @ self.simhash_hyperplanes.T)
+
 
     def float32_row_vecs(self, arr: np.ndarray):
         if arr.dtype not in self.allowed_input_types:
@@ -330,6 +376,26 @@ class VectorStore:
             result.append(result_row)
 
         return result
+
+    def search_random_projection(self, query: np.ndarray, k: int) -> list[list[SearchRecord]]:
+        # SimHash
+        # https://www.cs.princeton.edu/courses/archive/spring04/cos598B/bib/CharikarEstim.pdf
+        # https://proceedings.mlr.press/v33/shrivastava14.pdf
+        # https://www.mit.edu/~andoni/LSH/manual.pdf
+        #
+        # this is the actual simhash paper, which describes something kind of different from what the others say
+        # this paper talks about picking a few bitstrings and then counting how many times those bitstrings show up in data
+        # which I guess is sort of similar to the random projections LSH approach
+        # and very similar to a project I did a while about where I used the frequncy counts of bytes as the embedding features
+        # https://www.webrankinfo.com/dossiers/wp-content/uploads/simhash.pdf
+
+
+        # index any docs we haven't indexed yet
+        with self.connect() as con:
+            con.execute('select vec_id from index except select id as vec_id from vector;')
+        
+
+
 
     def query_by_doc(
         self, path: list[str], values: list[str | int]

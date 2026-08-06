@@ -5,3 +5,9 @@ CREATE TABLE IF NOT EXISTS vector (
     vec BLOB NOT NULL,
     doc TEXT
 );
+
+CREATE TABLE IF NOT EXISTS simhash (
+  id INTEGER PRIMARY KEY,
+  vec_id INTEGER NOT NULL UNIQUE REFERENCES vector(id),
+  hash BLOB NOT NULL
+);

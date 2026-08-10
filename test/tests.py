@@ -6,6 +6,9 @@ import numpy as np
 
 from vector_db_at_home.vector_store import VectorStore
 
+# TODO: copy all these tests for the LSH index too?
+# or check the LSH index in all of these tests?
+
 
 class TestVectorStore(TestCase):
     def setUp(self):
@@ -284,6 +287,9 @@ class TestVectorStore(TestCase):
             self.assertEqual(res["id"], i)
             self.assertNumpyEqual(res["vec"], a[i].reshape(-1, self.vs_dim))
             self.assertEqual(res["doc"], docs[i])
+
+        self.assertEqual(new.lsh_idx.shape, (size,))
+        self.assertEqual(new.lsh_idx[0]["hash"].shape, (self.vs.lsh_dim,))
 
     def test_insert_doc(self):
         a = np.ones((self.vs_dim,), dtype=np.float32)

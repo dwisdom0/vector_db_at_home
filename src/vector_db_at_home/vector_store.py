@@ -66,15 +66,22 @@ class VectorStore:
         self.index = np.empty((0,), dtype=self.structured_dtype)
 
         # hardcode some random value
-        # use 10 hyperplanes
-        self.simhash_bin_num = 10
-        self.simhash_dtype = np.dtype(
-            [("vec_id", np.uint64), ("hash", np.int8, self.dim)]
+        # use 5 hyperplanes
+        self.lsh_dim = 5
+        self.lsh_dtype = np.bool
+        self.lsh_idx_dtype = np.dtype(
+            [("vec_id", np.uint64), ("hash", self.lsh_dtype, self.lsh_dim)]
         )
-        self.simhash_hyperplanes = self.rng.normal(
-            loc=0, scale=1, size=(self.simhash_bin_num, self.dim)
+
+        # unit vectors sampled from the normal distribution
+        self.lsh_hyperplanes = self.rng.normal(
+            loc=0, scale=1, size=(self.dim, self.lsh_dim)
         )
-        self.simhash_idx = np.empty((0,), dtype=self.simhash_dtype)
+        self.lsh_hyperplanes = self.lsh_hyperplanes / np.linalg.norm(
+            self.lsh_hyperplanes, ord=2, axis=0
+        )
+
+        self.lsh_idx = np.empty((0,), dtype=self.lsh_idx_dtype)
 
         if os.path.exists(self.db_path):
             self.load_from_existing()
@@ -85,8 +92,6 @@ class VectorStore:
 
             with self.connect() as con:
                 con.executescript(schema_sql)
-
-        self.build_simhash_idx()
 
     def __repr__(self):
         return f"VectorStore(db_path={self.db_path}, dim={self.dim})"
@@ -103,6 +108,7 @@ class VectorStore:
             con.close()
 
     def load_from_existing(self):
+        # vectors
         with self.connect() as con:
             rows = con.execute("SELECT id, vec FROM vector;").fetchall()
         self.index = np.array(
@@ -111,6 +117,17 @@ class VectorStore:
                 for row in rows
             ],
             dtype=self.structured_dtype,
+        )
+
+        # LSH index
+        with self.connect() as con:
+            rows = con.execute("SELECT vec_id, digest FROM lsh_idx;").fetchall()
+        self.lsh_idx = np.array(
+            [
+                (row["vec_id"], np.frombuffer(row["digest"], dtype=self.lsh_dtype))
+                for row in rows
+            ],
+            dtype=self.lsh_idx_dtype,
         )
 
     def build_simhash_idx(self):
@@ -146,26 +163,32 @@ class VectorStore:
         # this is sort of backwards from the paper b/c my vectors are row vectors not column vectors
         np.sign(self.index["vec"] @ self.simhash_hyperplanes.T)
 
-    def float32_row_vecs(self, arr: np.ndarray):
+    def row_vecs(
+        self, arr: np.ndarray, target_dim: int, target_dtype: type
+    ) -> np.ndarray:
         if arr.dtype not in self.allowed_input_types:
             raise ValueError(f"input vectors of dtype {arr.dtype} are not supported")
 
-        if arr.dtype != self.vec_dtype:
+        if arr.dtype != target_dtype:
             warnings.warn(
-                f"Expected an array with a dtype of {self.vec_dtype}, but got an array of {arr.dtype}. Coercing to {self.vec_dtype}"
+                f"Expected an array with a dtype of {target_dtype}, but got an array of {arr.dtype}. Coercing to {target_dtype}"
             )
-        return arr.reshape(-1, self.dim).astype(self.vec_dtype)
+        return arr.reshape(-1, target_dim).astype(target_dtype)
 
-    def blobs_to_ndarray(self, blobs: list[bytes]) -> np.ndarray:
+    def blobs_to_ndarray(
+        self, blobs: list[bytes], target_dim: int, target_dtype: type
+    ) -> np.ndarray:
         if len(blobs) == 0:
-            return np.empty((0, 0), dtype=self.vec_dtype)
+            return np.empty((0, 0), dtype=target_dtype)
 
         return np.concat(
-            [np.frombuffer(blob, dtype=self.vec_dtype) for blob in blobs]
-        ).reshape(-1, self.dim)
+            [np.frombuffer(blob, dtype=target_dtype) for blob in blobs]
+        ).reshape(-1, target_dim)
 
-    def ndarray_to_blobs(self, arr: np.ndarray) -> list[bytes]:
-        return [self.float32_row_vecs(a).tobytes() for a in arr]
+    def ndarray_to_blobs(
+        self, arr: np.ndarray, target_dim: int, target_dtype: type
+    ) -> list[bytes]:
+        return [self.row_vecs(a, target_dim, target_dtype).tobytes() for a in arr]
 
     @staticmethod
     def json_parse(s: str | None) -> dict:
@@ -199,7 +222,9 @@ class VectorStore:
             to_return.append(
                 {
                     "id": row["id"],
-                    "vec": self.blobs_to_ndarray([row["vec"]]),
+                    "vec": self.blobs_to_ndarray(
+                        [row["vec"]], self.dim, self.vec_dtype
+                    ),
                     "doc": self.json_parse(row["doc"]),
                 }
             )
@@ -226,7 +251,7 @@ class VectorStore:
         self.insert(np.stack(vecs), docs)
 
     def insert(self, arr: np.ndarray, docs: list[dict] | None = None):
-        vecs = self.float32_row_vecs(arr)
+        vecs = self.row_vecs(arr, self.dim, self.vec_dtype)
         if vecs.shape[1] != self.dim:
             raise ValueError(
                 f"Cannot insert a vector shaped like {arr.shape} into a store that only holds vectors with {self.dim} elements"
@@ -253,7 +278,7 @@ class VectorStore:
         # so I manually insert ids like range(max_id, max_id + num_vecs)
         # which will leave holes in the id column if things get deleted but that's fine
 
-        blobs = self.ndarray_to_blobs(vecs)
+        blobs = self.ndarray_to_blobs(vecs, self.dim, self.vec_dtype)
         ids = list(range(start_id, start_id + len(blobs)))
         if docs is None:
             docs = [{}] * len(ids)
@@ -269,6 +294,7 @@ class VectorStore:
                 to_insert,
             )
 
+        # add to in-memory copy of the index
         self.index = np.concat(
             [
                 self.index,
@@ -278,6 +304,32 @@ class VectorStore:
             ]
         )
 
+        # add to LSH index
+        digests = self.lsh_digests(vecs)
+
+        # add to in-memory copy of the LSH index
+        self.lsh_idx = np.concat(
+            [
+                self.lsh_idx,
+                np.array(
+                    [(i, digest) for i, digest in zip(ids, digests)],
+                    dtype=self.lsh_idx_dtype,
+                ),
+            ]
+        )
+
+        # add to the persisted database copy of the LSH index
+        lsh_blobs = self.ndarray_to_blobs(digests, self.lsh_dim, self.lsh_dtype)
+        to_insert = [
+            {"vec_id": i, "digest": digest} for i, digest in zip(ids, lsh_blobs)
+        ]
+
+        with self.connect() as con:
+            con.executemany(
+                "INSERT INTO lsh_idx (vec_id, digest) VALUES (:vec_id, :digest);",
+                to_insert,
+            )
+
     def delete(self, ids: list[int]):
         with self.connect() as con:
             # https://sqlite.org/limits.html
@@ -285,7 +337,7 @@ class VectorStore:
             # some versions limit it to 999
             # others ~32k
             # can check SQLITE_MAX_VARIABLE_NUMBER if we want to be super safe
-            # other wise I think it's fine to just let it error
+            # otherwise I think it's fine to just let it error
             placeholders = ",".join(["?" for _ in ids])
             count_result = con.execute(
                 f"select count(id) from vector where id in ({placeholders})", ids
@@ -311,7 +363,9 @@ class VectorStore:
             records.append(
                 SelectRecord(
                     id=result["id"],
-                    vec=self.blobs_to_ndarray([result["vec"]]),
+                    vec=self.blobs_to_ndarray(
+                        [result["vec"]], self.dim, self.vec_dtype
+                    ),
                     doc=self.json_parse(result["doc"]),
                 )
             )
@@ -327,7 +381,7 @@ class VectorStore:
             raise ValueError(
                 f"Asked for {k} results but there are only {len(self.index)} vectors in the index"
             )
-        q_vecs = self.float32_row_vecs(query)
+        q_vecs = self.row_vecs(query, self.dim, self.vec_dtype)
 
         # TODO: vectorize this loop
         search_ids = []
@@ -360,7 +414,7 @@ class VectorStore:
         for row in rows:
             unique_results[row["id"]] = {
                 "id": int(row["id"]),
-                "vec": self.blobs_to_ndarray([row["vec"]])[0],
+                "vec": self.blobs_to_ndarray([row["vec"]], self.dim, self.vec_dtype)[0],
                 "doc": self.json_parse(row["doc"]),
             }
 
@@ -376,9 +430,7 @@ class VectorStore:
 
         return result
 
-    def search_random_projection(
-        self, query: np.ndarray, k: int
-    ) -> list[list[SearchRecord]]:
+    def search_lsh(self, query: np.ndarray, k: int) -> list[list[SearchRecord]]:
         # SimHash
         # https://www.cs.princeton.edu/courses/archive/spring04/cos598B/bib/CharikarEstim.pdf
         # https://proceedings.mlr.press/v33/shrivastava14.pdf
@@ -389,12 +441,7 @@ class VectorStore:
         # which I guess is sort of similar to the random projections LSH approach
         # and very similar to a project I did a while about where I used the frequncy counts of bytes as the embedding features
         # https://www.webrankinfo.com/dossiers/wp-content/uploads/simhash.pdf
-
-        # index any docs we haven't indexed yet
-        with self.connect() as con:
-            con.execute(
-                "select vec_id from index except select id as vec_id from vector;"
-            )
+        pass
 
     def query_by_doc(
         self, path: list[str], values: list[str | int]
@@ -414,7 +461,7 @@ class VectorStore:
         return [
             SelectRecord(
                 id=r["id"],
-                vec=self.blobs_to_ndarray([r["vec"]]),
+                vec=self.blobs_to_ndarray([r["vec"]], self.dim, self.vec_dtype),
                 doc=self.json_parse(r["doc"]),
             )
             for r in rows
@@ -457,13 +504,18 @@ class VectorStore:
                 query_results.append(
                     SearchRecord(
                         id=row["id"],
-                        vec=self.blobs_to_ndarray([row["vec"]])[0],
+                        vec=self.blobs_to_ndarray(
+                            [row["vec"]], self.dim, self.vec_dtype
+                        )[0],
                         doc=self.json_parse(row["doc"]),
                         distance=score_dist,
                     )
                 )
             results.append(query_results)
         return results
+
+    def lsh_digests(self, vecs: np.ndarray) -> np.ndarray:
+        return np.where(vecs @ self.lsh_hyperplanes > 0, True, False)
 
     def dump_vecs(self):
         return self.index["vec"]

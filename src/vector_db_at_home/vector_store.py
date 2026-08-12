@@ -304,7 +304,7 @@ class VectorStore:
             ]
         )
 
-        # add to LSH index
+        # hash for LSH
         digests = self.lsh_digests(vecs)
 
         # add to in-memory copy of the LSH index
@@ -441,7 +441,92 @@ class VectorStore:
         # which I guess is sort of similar to the random projections LSH approach
         # and very similar to a project I did a while about where I used the frequncy counts of bytes as the embedding features
         # https://www.webrankinfo.com/dossiers/wp-content/uploads/simhash.pdf
-        pass
+        #
+        # I'm not really doing any of this, I'm doing fairly basic random projections instead
+
+        if self.lsh_idx is None:
+            return list({})
+
+        # TODO: handle k > len(self.index)
+        # FAISS handles this by padding the results list with -1
+        #
+        # TODO: we could have >k vectors in the db
+        # but cut down the search space to <k
+        # and then we'd return <k results
+        # I think it probably fine?
+        # We don't really have any reason to match FAISS behavior
+
+        if k > len(self.index):
+            raise ValueError(
+                f"Asked for {k} results but there are only {len(self.index)} vectors in the index"
+            )
+        q_vecs = self.row_vecs(query, self.dim, self.vec_dtype)
+        q_digests = self.lsh_digests(q_vecs)
+
+        # TODO: refactor to DRY this
+        # this is mostly copied from search()
+        # but we should have a function that does this sorting part
+        # given a search space and a query vector
+        # maybe even get stuff from the database too and format it into SearchRecords
+        # idk if that will work for HNSW though
+        # I think we'll have to split out the sorting a search space
+        # from getting the actual records and formatting them
+        # since I think HNSW sorts within each node but I'm not sure
+
+        search_ids = []
+        search_distances = []
+        for q_vec, q_digest in zip(q_vecs, q_digests):
+            # shrink the search space down to only the vectors that have the same LSH as the query
+            search_space_ids = self.lsh_idx[
+                (self.lsh_idx["hash"] == q_digest).all(axis=1)
+            ]["vec_id"]
+
+            # have to go get the actual vectors from the main index
+            # so we can sort them by distance
+            search_space = self.index[search_space_ids]
+
+            distances = np.linalg.norm(search_space["vec"] - q_vec, ord=2, axis=1)
+            search_distances.append(np.sort(distances)[:k])
+            # search_distances.append(distances[])
+            # these ids have nothing to do with our real ids
+            # they're just a 0-based enumeration of our current self.index items
+            # so we have to go get the real ids from search_space
+            result_ids = np.argsort(distances)[:k]
+            search_ids.append(search_space[result_ids]["id"])
+
+        search_ids = np.array(search_ids)
+        search_distances = np.array(search_distances)
+
+        # it's possible that the same result could show up multiple times
+        # if there are multiple query vectors
+        # but we only want to get each result from the db once
+        unique_ids = np.unique(search_ids).tolist()
+        placeholders = ",".join(["?" for id_ in unique_ids if id_ != -1])
+
+        with self.connect() as con:
+            rows = con.execute(
+                f"select id, vec, doc from vector where id in ({placeholders})",
+                unique_ids,
+            ).fetchall()
+        unique_results = {}
+        for row in rows:
+            unique_results[row["id"]] = {
+                "id": int(row["id"]),
+                "vec": self.blobs_to_ndarray([row["vec"]], self.dim, self.vec_dtype)[0],
+                "doc": self.json_parse(row["doc"]),
+            }
+
+        # fill in a 2D list of dicts for the results
+        result = []
+        for i, r in enumerate(search_ids):
+            result_row = []
+            for j, id_ in enumerate(r):
+                result_row.append(
+                    SearchRecord(**unique_results[id_], distance=search_distances[i][j])
+                )
+            result.append(result_row)
+
+        return result
 
     def query_by_doc(
         self, path: list[str], values: list[str | int]

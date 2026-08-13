@@ -371,25 +371,24 @@ class VectorStore:
             )
         return records
 
-    def search(self, query: np.ndarray, k: int) -> list[list[SearchRecord]]:
-        if self.index is None:
-            return list({})
+    def sort_universe(
+        self, universe: np.ndarray, queries: np.ndarray, k: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        if universe is None:
+            return np.array([]), np.array([])
 
-        # TODO: handle k > len(self.index)
-        # FAISS handles this by padding the results list with -1
         if k > len(self.index):
             raise ValueError(
-                f"Asked for {k} results but there are only {len(self.index)} vectors in the index"
+                f"Asked for {k} results but there are only {len(universe)} vectors in the universe"
             )
-        q_vecs = self.row_vecs(query, self.dim, self.vec_dtype)
+        q_vecs = self.row_vecs(queries, self.dim, self.vec_dtype)
 
         # TODO: vectorize this loop
         search_ids = []
         search_distances = []
         for q_vec in q_vecs:
-            distances = np.linalg.norm(self.index["vec"] - q_vec, ord=2, axis=1)
+            distances = np.linalg.norm(universe["vec"] - q_vec, ord=2, axis=1)
             search_distances.append(np.sort(distances)[:k])
-            # search_distances.append(distances[])
             # these ids have nothing to do with our real ids
             # they're just a 0-based enumeration of our current self.index items
             # so we have to go get the real ids from self.index
@@ -398,6 +397,10 @@ class VectorStore:
 
         search_ids = np.array(search_ids)
         search_distances = np.array(search_distances)
+        return search_ids, search_distances
+
+    def search(self, queries: np.ndarray, k: int) -> list[list[SearchRecord]]:
+        search_ids, search_distances = self.sort_universe(self.index, queries, k)
 
         # it's possible that the same result could show up multiple times
         # if there are multiple query vectors
@@ -447,31 +450,8 @@ class VectorStore:
         if self.lsh_idx is None:
             return list({})
 
-        # TODO: handle k > len(self.index)
-        # FAISS handles this by padding the results list with -1
-        #
-        # TODO: we could have >k vectors in the db
-        # but cut down the search space to <k
-        # and then we'd return <k results
-        # I think it probably fine?
-        # We don't really have any reason to match FAISS behavior
-
-        if k > len(self.index):
-            raise ValueError(
-                f"Asked for {k} results but there are only {len(self.index)} vectors in the index"
-            )
         q_vecs = self.row_vecs(query, self.dim, self.vec_dtype)
         q_digests = self.lsh_digests(q_vecs)
-
-        # TODO: refactor to DRY this
-        # this is mostly copied from search()
-        # but we should have a function that does this sorting part
-        # given a search space and a query vector
-        # maybe even get stuff from the database too and format it into SearchRecords
-        # idk if that will work for HNSW though
-        # I think we'll have to split out the sorting a search space
-        # from getting the actual records and formatting them
-        # since I think HNSW sorts within each node but I'm not sure
 
         search_ids = []
         search_distances = []
@@ -485,17 +465,20 @@ class VectorStore:
             # so we can sort them by distance
             search_space = self.index[search_space_ids]
 
-            distances = np.linalg.norm(search_space["vec"] - q_vec, ord=2, axis=1)
-            search_distances.append(np.sort(distances)[:k])
-            # search_distances.append(distances[])
-            # these ids have nothing to do with our real ids
-            # they're just a 0-based enumeration of our current self.index items
-            # so we have to go get the real ids from search_space
-            result_ids = np.argsort(distances)[:k]
-            search_ids.append(search_space[result_ids]["id"])
+            search_ids_loop, search_distances_loop = self.sort_universe(
+                search_space, q_vec, k
+            )
+            # the thing that we get back from sort_universe is already 2d
+            # so we have to use extend()
+            # otherwise we end up with a 3d thing with an extra unused dimension
+            # and np.unique() will return arrays instead of scalar ids
+            search_ids.extend(search_ids_loop)
+            search_distances.extend(search_distances_loop)
 
         search_ids = np.array(search_ids)
         search_distances = np.array(search_distances)
+
+        # TODO: refactor this db and formatting thing out to a separate function
 
         # it's possible that the same result could show up multiple times
         # if there are multiple query vectors

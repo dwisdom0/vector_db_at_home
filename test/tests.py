@@ -4,6 +4,7 @@ from unittest import TestCase
 
 import numpy as np
 
+from test.common import assertNumpyEqual, gen_docs
 from vector_db_at_home.vector_store import VectorStore
 
 # TODO: copy all these tests for the LSH index too?
@@ -24,13 +25,6 @@ class TestVectorStore(TestCase):
     def tearDown(self):
         os.remove(self.vs_path)
         super().tearDown()
-
-    @staticmethod
-    def gen_docs(ns: list) -> list[dict]:
-        return [{f"k{n}": f"v{n}"} for n in ns]
-
-    def assertNumpyEqual(self, a, b):
-        return self.assertTrue(np.array_equal(a, b))
 
     def test_insert_1(self):
         arr = np.ones((self.vs_dim,), dtype=np.float32)
@@ -169,13 +163,13 @@ class TestVectorStore(TestCase):
         # can't just make the dict and do assertEqual
         # b/c it will have a numpy array
         self.assertEqual(head_result[0]["id"], 0)
-        self.assertNumpyEqual(head_result[0]["vec"], a.reshape(-1, self.vs_dim))
+        assertNumpyEqual(head_result[0]["vec"], a.reshape(-1, self.vs_dim))
         self.assertEqual(head_result[0]["doc"], docs[0])
 
     def test_head_5(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
         head_result = self.vs.head(size)
@@ -184,12 +178,12 @@ class TestVectorStore(TestCase):
 
         for i, res in enumerate(head_result):
             self.assertEqual(res["id"], i)
-            self.assertNumpyEqual(res["vec"], a[i].reshape(-1, self.vs_dim))
+            assertNumpyEqual(res["vec"], a[i].reshape(-1, self.vs_dim))
             self.assertEqual(res["doc"], docs[i])
 
     def test_search(self):
         a = np.eye(self.vs_dim, dtype=np.float32)
-        docs = self.gen_docs(list(range(self.vs_dim)))
+        docs = gen_docs(list(range(self.vs_dim)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), self.vs_dim)
 
@@ -207,7 +201,7 @@ class TestVectorStore(TestCase):
         # the next best match should be the 4th basis vector
         for i, bv in enumerate([9, 3]):
             self.assertEqual(search_results[0][i].id, bv)
-            self.assertNumpyEqual(
+            assertNumpyEqual(
                 search_results[0][i].vec,
                 np.array(
                     [0] * bv + [1] + [0] * (self.vs_dim - bv - 1), dtype=np.float32
@@ -220,7 +214,7 @@ class TestVectorStore(TestCase):
 
     def test_search_many_queries(self):
         a = np.eye(self.vs_dim, dtype=np.float32)
-        docs = self.gen_docs(list(range(self.vs_dim)))
+        docs = gen_docs(list(range(self.vs_dim)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), self.vs_dim)
 
@@ -244,7 +238,7 @@ class TestVectorStore(TestCase):
         # the next best should be the second basis vector
         for i, bv in enumerate([0, 1]):
             self.assertEqual(search_results[0][i].id, bv)
-            self.assertNumpyEqual(
+            assertNumpyEqual(
                 search_results[0][i].vec,
                 np.array(
                     [0] * bv + [1] + [0] * (self.vs_dim - bv - 1), dtype=np.float32
@@ -259,7 +253,7 @@ class TestVectorStore(TestCase):
         # the next best should be the third basis vector
         for i, bv in enumerate([1, 2]):
             self.assertEqual(search_results[1][i].id, bv)
-            self.assertNumpyEqual(
+            assertNumpyEqual(
                 search_results[1][i].vec,
                 np.array(
                     [0] * bv + [1] + [0] * (self.vs_dim - bv - 1), dtype=np.float32
@@ -272,7 +266,7 @@ class TestVectorStore(TestCase):
     def test_load_from_existing(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
 
         # make a new store using the sqlite db used by self.vs
@@ -285,7 +279,7 @@ class TestVectorStore(TestCase):
 
         for i, res in enumerate(head_result):
             self.assertEqual(res["id"], i)
-            self.assertNumpyEqual(res["vec"], a[i].reshape(-1, self.vs_dim))
+            assertNumpyEqual(res["vec"], a[i].reshape(-1, self.vs_dim))
             self.assertEqual(res["doc"], docs[i])
 
         self.assertEqual(new.lsh_idx.shape, (size,))
@@ -293,7 +287,7 @@ class TestVectorStore(TestCase):
 
     def test_insert_doc(self):
         a = np.ones((self.vs_dim,), dtype=np.float32)
-        docs = self.gen_docs([0])
+        docs = gen_docs([0])
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), 1)
 
@@ -302,13 +296,13 @@ class TestVectorStore(TestCase):
         self.assertEqual(len(search_results[0]), 1)
 
         self.assertEqual(search_results[0][0].id, 0)
-        self.assertNumpyEqual(search_results[0][0].vec, a)
+        assertNumpyEqual(search_results[0][0].vec, a)
         self.assertEqual(search_results[0][0].doc, {"k0": "v0"})
         self.assertEqual(search_results[0][0].distance, np.float32(0))
 
     def test_insert_many_docs(self):
         size = 5
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         a = np.ones((size, self.vs_dim), dtype=np.float32)
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
@@ -327,9 +321,7 @@ class TestVectorStore(TestCase):
                 self.assertTrue(i not in found)
                 found.add(i)
                 self.assertEqual(result.id, i)
-                self.assertNumpyEqual(
-                    result.vec, np.ones((self.vs_dim,), dtype=np.float32)
-                )
+                assertNumpyEqual(result.vec, np.ones((self.vs_dim,), dtype=np.float32))
                 self.assertEqual(result.doc, {f"k{i}": f"v{i}"})
                 self.assertEqual(result.distance, np.float32(0))
 
@@ -337,7 +329,7 @@ class TestVectorStore(TestCase):
 
     def test_delete(self):
         a = np.ones((self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs([0])
+        docs = gen_docs([0])
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), 1)
 
@@ -349,7 +341,7 @@ class TestVectorStore(TestCase):
     def test_delete_many(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
 
@@ -362,7 +354,7 @@ class TestVectorStore(TestCase):
         size = 5
         del_size = 3
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
         self.assertEqual(self.vs.count(), size)
 
@@ -373,9 +365,7 @@ class TestVectorStore(TestCase):
         head_result = self.vs.head()
         for i, record in enumerate(head_result):
             self.assertEqual(record["id"], i)
-            self.assertNumpyEqual(
-                record["vec"], np.ones((1, self.vs_dim), dtype=np.float32)
-            )
+            assertNumpyEqual(record["vec"], np.ones((1, self.vs_dim), dtype=np.float32))
             self.assertEqual(record["doc"], {f"k{i}": f"v{i}"})
 
     def test_delete_mess_up_ids(self):
@@ -383,7 +373,7 @@ class TestVectorStore(TestCase):
 
         # insert 5
         self.vs.insert(
-            np.ones((5, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(5)))
+            np.ones((5, self.vs_dim), dtype=np.float32), gen_docs(list(range(5)))
         )
         self.assertEqual(5, self.vs.count())
         # delete id 2, which will be in the middle
@@ -392,7 +382,7 @@ class TestVectorStore(TestCase):
         # insert again
         self.vs.insert(
             np.ones((3, self.vs_dim), dtype=np.float32),
-            self.gen_docs(list(range(5, 8))),
+            gen_docs(list(range(5, 8))),
         )
         self.assertEqual(self.vs.count(), 7)
 
@@ -463,14 +453,12 @@ class TestVectorStore(TestCase):
 
     def test_query_doc(self):
         self.vs.insert(
-            np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))
+            np.ones((3, self.vs_dim), dtype=np.float32), gen_docs(list(range(3)))
         )
         results = self.vs.query_by_doc(["k1"], ["v1"])
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].id, 1)
-        self.assertNumpyEqual(
-            results[0].vec, np.ones((1, self.vs_dim), dtype=np.float32)
-        )
+        assertNumpyEqual(results[0].vec, np.ones((1, self.vs_dim), dtype=np.float32))
         self.assertEqual(results[0].doc, {"k1": "v1"})
 
     def test_query_many_doc(self):
@@ -490,7 +478,7 @@ class TestVectorStore(TestCase):
 
     def test_select_ids(self):
         self.vs.insert(
-            np.ones((5, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(5)))
+            np.ones((5, self.vs_dim), dtype=np.float32), gen_docs(list(range(5)))
         )
         ids = [1, 3]
         result = self.vs.select_ids(ids)
@@ -498,14 +486,12 @@ class TestVectorStore(TestCase):
 
         for i, id_ in enumerate(ids):
             self.assertEqual(result[i].id, id_)
-            self.assertNumpyEqual(
-                result[i].vec, np.ones((1, self.vs_dim), dtype=np.float32)
-            )
+            assertNumpyEqual(result[i].vec, np.ones((1, self.vs_dim), dtype=np.float32))
             self.assertEqual(result[i].doc, {f"k{id_}": f"v{id_}"})
 
     def test_select_bad_id(self):
         self.vs.insert(
-            np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))
+            np.ones((3, self.vs_dim), dtype=np.float32), gen_docs(list(range(3)))
         )
         result = self.vs.select_ids([6])
         self.assertEqual(len(result), 0)
@@ -513,10 +499,10 @@ class TestVectorStore(TestCase):
 
     def test_dump_vecs(self):
         self.vs.insert(
-            np.ones((3, self.vs_dim), dtype=np.float32), self.gen_docs(list(range(3)))
+            np.ones((3, self.vs_dim), dtype=np.float32), gen_docs(list(range(3)))
         )
         result = self.vs.dump_vecs()
-        self.assertNumpyEqual(result, np.ones((3, self.vs_dim)))
+        assertNumpyEqual(result, np.ones((3, self.vs_dim), dtype=np.float32))
 
     def test_dump_vecs_order(self):
         self.vs.insert(
@@ -527,12 +513,12 @@ class TestVectorStore(TestCase):
         )
         self.vs.delete([1])
         r1 = self.vs.dump_vecs()
-        self.assertNumpyEqual(
+        assertNumpyEqual(
             r1, np.array([[0] * self.vs_dim, [2] * self.vs_dim], dtype=np.float32)
         )
         self.vs.insert(np.array([3] * self.vs_dim, dtype=np.float32))
         r2 = self.vs.dump_vecs()
-        self.assertNumpyEqual(
+        assertNumpyEqual(
             r2,
             np.array(
                 [[0] * self.vs_dim, [2] * self.vs_dim, [3] * self.vs_dim],
@@ -543,7 +529,7 @@ class TestVectorStore(TestCase):
     def test_search_by_doc(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
 
         res = self.vs.search_by_doc([{"1": "1"}], k=size)
@@ -552,7 +538,7 @@ class TestVectorStore(TestCase):
 
         # the best search result should be {"k1": "v1"}
         self.assertEqual(res[0][0].id, 1)
-        self.assertNumpyEqual(
+        assertNumpyEqual(
             res[0][0].vec, np.ones((1, self.vs_dim), dtype=np.float32).flatten()
         )
         self.assertEqual(res[0][0].doc, {"k1": "v1"})
@@ -565,7 +551,7 @@ class TestVectorStore(TestCase):
     def test_search_by_doc_multiple_queries(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
 
         res = self.vs.search_by_doc([{"k1": ""}, "v4"], k=3)
@@ -575,7 +561,7 @@ class TestVectorStore(TestCase):
 
         # check the results for the first query
         self.assertEqual(res[0][0].id, 1)
-        self.assertNumpyEqual(
+        assertNumpyEqual(
             res[0][0].vec, np.ones((1, self.vs_dim), dtype=np.float32).flatten()
         )
         self.assertEqual(res[0][0].doc, {"k1": "v1"})
@@ -586,7 +572,7 @@ class TestVectorStore(TestCase):
 
         # check the results for the second query
         self.assertEqual(res[1][0].id, 4)
-        self.assertNumpyEqual(
+        assertNumpyEqual(
             res[1][0].vec, np.ones((1, self.vs_dim), dtype=np.float32).flatten()
         )
         self.assertEqual(res[1][0].doc, {"k4": "v4"})
@@ -598,7 +584,7 @@ class TestVectorStore(TestCase):
     def test_search_by_doc_zero_results(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
 
         with self.assertRaises(ValueError):
@@ -607,9 +593,100 @@ class TestVectorStore(TestCase):
     def test_search_by_doc_too_many_results(self):
         size = 5
         a = np.ones((size, self.vs_dim), dtype=np.float32)
-        docs = self.gen_docs(list(range(size)))
+        docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
 
         res = self.vs.search_by_doc([{"1": "1"}], k=size + 1)
         self.assertEqual(len(res), 1)
         self.assertEqual(len(res[0]), 5)
+
+    def test_search_k_zero(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+
+        with self.assertRaises(ValueError):
+            self.vs.search(np.ones(self.vs_dim), k=0)
+
+    def test_search_k_negative(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+
+        with self.assertRaises(ValueError):
+            self.vs.search(np.ones(self.vs_dim), k=-1)
+
+    def test_search_k_too_large(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+
+        with self.assertRaises(ValueError):
+            self.vs.search(np.ones(self.vs_dim), k=4)
+
+    def test_search_empty_store(self):
+        query = np.ones(self.vs_dim, dtype=np.float32)
+        self.assertEqual(self.vs.search(query, k=1), [[]])
+
+    def test_ids_start_at_zero(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+
+        self.assertEqual(
+            self.vs.index["id"].tolist(),
+            [0, 1, 2],
+        )
+
+    def test_ids_continue_across_inserts(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+        self.vs.insert(np.ones((2, self.vs_dim), dtype=np.float32))
+
+        self.assertEqual(
+            self.vs.index["id"].tolist(),
+            [0, 1, 2, 3, 4],
+        )
+
+    def test_deleted_ids_are_not_reused(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+        self.vs.delete([1])
+
+        self.vs.insert(np.ones((2, self.vs_dim), dtype=np.float32))
+
+        self.assertEqual(
+            self.vs.index["id"].tolist(),
+            [0, 2, 3, 4],
+        )
+
+    def test_delete_nonexistent_id(self):
+        self.vs.insert(np.ones((2, self.vs_dim), dtype=np.float32))
+
+        with self.assertWarns(UserWarning):
+            self.vs.delete([99])
+
+        self.assertEqual(self.vs.count(), 2)
+
+    def test_delete_nonexistent_ids(self):
+        self.vs.insert(np.ones((2, self.vs_dim), dtype=np.float32))
+
+        with self.assertWarns(UserWarning):
+            self.vs.delete([0, 99])
+
+        self.assertEqual(self.vs.count(), 2)
+
+    def test_persistence_preserves_search_results(self):
+        rng = np.random.default_rng(123)
+
+        vecs = rng.normal(size=(50, self.vs_dim)).astype(np.float32)
+        docs = [{"id": i, "text": f"document {i}"} for i in range(50)]
+
+        self.vs.insert(vecs, docs)
+
+        query = rng.normal(size=(3, self.vs_dim)).astype(np.float32)
+
+        before = self.vs.search(query, k=5)
+
+        new = VectorStore(self.vs_path, self.vs_dim)
+        after = new.search(query, k=5)
+
+        self.assertEqual(
+            [[r.id for r in row] for row in before],
+            [[r.id for r in row] for row in after],
+        )
+
+        np.testing.assert_allclose(
+            [[r.distance for r in row] for row in before],
+            [[r.distance for r in row] for row in after],
+        )

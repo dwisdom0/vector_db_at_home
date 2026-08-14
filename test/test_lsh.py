@@ -3,6 +3,7 @@ from unittest import TestCase
 
 import numpy as np
 
+from test.common import assertNumpyEqual
 from vector_db_at_home import VectorStore
 
 
@@ -20,13 +21,6 @@ class TestLSH(TestCase):
     def tearDown(self):
         os.remove(self.vs_path)
         super().tearDown()
-
-    @staticmethod
-    def gen_docs(ns: list) -> list[dict]:
-        return [{f"k{n}": f"v{n}"} for n in ns]
-
-    def assertNumpyEqual(self, a, b):
-        return self.assertTrue(np.array_equal(a, b))
 
     def test_ann_search(self):
         v1 = [0] * self.vs_dim
@@ -65,8 +59,79 @@ class TestLSH(TestCase):
         # our search query was a vector that was already in the db
         # so it should come back as the best match
         self.assertEqual("v1", results[0][0].doc["name"])
-        self.assertNumpyEqual(v1, results[0][0].vec)
+        assertNumpyEqual(v1, results[0][0].vec)
 
         # the next closest vector should be v_close
         self.assertEqual("v_close", results[0][1].doc["name"])
-        self.assertNumpyEqual(v_close, results[0][1].vec)
+        assertNumpyEqual(v_close, results[0][1].vec)
+
+    def test_delete_removes_lsh_index(self):
+        vecs = np.eye(self.vs_dim, dtype=np.float32)[:3]
+        self.vs.insert(vecs)
+
+        self.assertEqual(len(self.vs.lsh_idx), 3)
+
+        self.vs.delete([1])
+
+        self.assertEqual(len(self.vs.lsh_idx), 2)
+
+        lsh_ids = self.vs.lsh_idx["vec_id"].tolist()
+        self.assertEqual(lsh_ids, [0, 2])
+
+        with self.vs.connect() as con:
+            rows = con.execute("SELECT vec_id FROM lsh_idx ORDER BY vec_id").fetchall()
+
+        self.assertEqual([r["vec_id"] for r in rows], [0, 1, 2])
+
+    def test_lsh_search_after_delete_with_id_hole(self):
+        vecs = np.eye(self.vs_dim, dtype=np.float32)[:5]
+        self.vs.insert(vecs)
+
+        self.vs.delete([1])
+
+        query = vecs[3]
+        results = self.vs.search_lsh(query, k=1)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0][0].id, 3)
+        self.assertEqual(results[0][0].distance, np.float32(0))
+
+    def test_search_lsh_zero(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+
+        with self.assertRaises(ValueError):
+            self.vs.search_lsh(np.ones(self.vs_dim), k=0)
+
+    def test_search_lsh_negative(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+
+        with self.assertRaises(ValueError):
+            self.vs.search_lsh(np.ones(self.vs_dim), k=-1)
+
+    def test_search_lsh_too_large(self):
+        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
+
+        with self.assertRaises(ValueError):
+            self.vs.search_lsh(np.ones(self.vs_dim), k=4)
+
+    def test_search_lsh_empty_store(self):
+        query = np.ones(self.vs_dim, dtype=np.float32)
+        self.assertEqual(self.vs.search_lsh(query, k=1), [[]])
+
+    def test_persistence_preserves_lsh_index(self):
+        rng = np.random.default_rng(123)
+
+        vecs = rng.normal(size=(50, self.vs_dim)).astype(np.float32)
+        self.vs.insert(vecs)
+
+        new = VectorStore(self.vs_path, self.vs_dim)
+
+        np.testing.assert_array_equal(
+            self.vs.lsh_idx["vec_id"],
+            new.lsh_idx["vec_id"],
+        )
+
+        np.testing.assert_array_equal(
+            self.vs.lsh_idx["hash"],
+            new.lsh_idx["hash"],
+        )

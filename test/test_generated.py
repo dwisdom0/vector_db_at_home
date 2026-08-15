@@ -6,6 +6,7 @@ from unittest import TestCase
 
 import numpy as np
 
+from test.common import assertNumpyEqual
 from vector_db_at_home import VectorStore
 
 
@@ -27,9 +28,6 @@ class TestVectorStoreAdditional(TestCase):
     def cleanup_database(self):
         if os.path.exists(self.vs_path):
             os.remove(self.vs_path)
-
-    def assertNumpyEqual(self, a, b):
-        self.assertTrue(np.array_equal(a, b))
 
     def assert_indexes_consistent(self):
         """
@@ -549,7 +547,7 @@ class TestVectorStoreAdditional(TestCase):
         same_digest = self.vs.lsh_digests(same_bucket.reshape(1, -1))[0]
         different_digest = self.vs.lsh_digests(different_bucket.reshape(1, -1))[0]
 
-        self.assertNumpyEqual(vec_digest, same_digest)
+        assertNumpyEqual(vec_digest, same_digest)
         self.assertFalse(np.array_equal(vec_digest, different_digest))
 
     def test_lsh_prunes_different_bucket(self):

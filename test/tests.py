@@ -600,28 +600,6 @@ class TestVectorStore(TestCase):
         self.assertEqual(len(res), 1)
         self.assertEqual(len(res[0]), 5)
 
-    def test_search_k_zero(self):
-        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        with self.assertRaises(ValueError):
-            self.vs.search(np.ones(self.vs_dim), k=0)
-
-    def test_search_k_negative(self):
-        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        with self.assertRaises(ValueError):
-            self.vs.search(np.ones(self.vs_dim), k=-1)
-
-    def test_search_k_too_large(self):
-        self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        with self.assertRaises(ValueError):
-            self.vs.search(np.ones(self.vs_dim), k=4)
-
-    def test_search_empty_store(self):
-        query = np.ones(self.vs_dim, dtype=np.float32)
-        self.assertEqual(self.vs.search(query, k=1), [[]])
-
     def test_ids_start_at_zero(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
 

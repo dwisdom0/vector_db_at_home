@@ -349,6 +349,7 @@ class VectorStore:
 
             con.executemany("DELETE FROM vector WHERE id = ?", [(i,) for i in ids])
         self.index = self.index[~np.isin(self.index["id"], ids)]
+        self.lsh_idx = self.lsh_idx[~np.isin(self.lsh_idx["vec_id"], ids)]
 
     def select_ids(self, ids: list[int]) -> list[SelectRecord]:
         placeholders = ",".join(["?" for _ in ids])
@@ -374,7 +375,7 @@ class VectorStore:
     def sort_universe(
         self, universe: np.ndarray, queries: np.ndarray, k: int
     ) -> tuple[np.ndarray, np.ndarray]:
-        if universe is None:
+        if universe is None or len(universe) == 0:
             return np.array([]), np.array([])
 
         if k > len(self.index):
@@ -400,6 +401,12 @@ class VectorStore:
         return search_ids, search_distances
 
     def search(self, queries: np.ndarray, k: int) -> list[list[SearchRecord]]:
+        if self.index is None or len(self.index) == 0:
+            return [[]]
+
+        if k < 0:
+            return [[]]
+
         search_ids, search_distances = self.sort_universe(self.index, queries, k)
 
         # it's possible that the same result could show up multiple times
@@ -447,8 +454,12 @@ class VectorStore:
         #
         # I'm not really doing any of this, I'm doing fairly basic random projections instead
 
-        if self.lsh_idx is None:
-            return list({})
+        # TODO: move this validation to a separate function that all of the different search methods call
+        if self.lsh_idx is None or len(self.lsh_idx) == 0:
+            return [[]]
+
+        if k < 0:
+            return [[]]
 
         q_vecs = self.row_vecs(query, self.dim, self.vec_dtype)
         q_digests = self.lsh_digests(q_vecs)
@@ -457,13 +468,13 @@ class VectorStore:
         search_distances = []
         for q_vec, q_digest in zip(q_vecs, q_digests):
             # shrink the search space down to only the vectors that have the same LSH as the query
-            search_space_ids = self.lsh_idx[
+            search_space_vec_ids = self.lsh_idx[
                 (self.lsh_idx["hash"] == q_digest).all(axis=1)
             ]["vec_id"]
 
             # have to go get the actual vectors from the main index
             # so we can sort them by distance
-            search_space = self.index[search_space_ids]
+            search_space = self.index[np.isin(self.index["id"], search_space_vec_ids)]
 
             search_ids_loop, search_distances_loop = self.sort_universe(
                 search_space, q_vec, k

@@ -46,6 +46,8 @@ class TestVectorStoreAdditional(TestCase):
 
         self.assertEqual(db_lsh_ids, memory_lsh_ids)
 
+        self.assertEqual(memory_vector_ids, memory_lsh_ids)
+
     def set_deterministic_hyperplanes(self):
         """
         Make the LSH behavior deterministic and easy to reason about.
@@ -66,51 +68,45 @@ class TestVectorStoreAdditional(TestCase):
 
     def test_search_k_zero(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        with self.assertRaises(ValueError):
-            self.vs.search(np.ones(self.vs_dim, dtype=np.float32), k=0)
+        query = np.ones(self.vs_dim, dtype=np.float32)
+        self.assertEqual(self.vs.search(query, k=0), [[]])
 
     def test_search_k_negative(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        with self.assertRaises(ValueError):
-            self.vs.search(np.ones(self.vs_dim, dtype=np.float32), k=-1)
+        query = np.ones(self.vs_dim, dtype=np.float32)
+        self.assertEqual(self.vs.search(query, k=-1), [[]])
 
     def test_search_k_too_large(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
 
+        # TODO: this isn't a value error, we just return 3 things
         with self.assertRaises(ValueError):
             self.vs.search(np.ones(self.vs_dim, dtype=np.float32), k=4)
 
     def test_search_lsh_k_zero(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        with self.assertRaises(ValueError):
-            self.vs.search_lsh(np.ones(self.vs_dim, dtype=np.float32), k=0)
+        query = np.ones(self.vs_dim, dtype=np.float32)
+        self.assertEqual(self.vs.search_lsh(query, k=0), [[]])
 
     def test_search_lsh_k_negative(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        with self.assertRaises(ValueError):
-            self.vs.search_lsh(np.ones(self.vs_dim, dtype=np.float32), k=-1)
+        query = np.ones(self.vs_dim, dtype=np.float32)
+        self.assertEqual(self.vs.search_lsh(query, k=-1), [[]])
 
     def test_search_lsh_k_too_large(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
 
+        # TODO: this isn't a value error, we just return 3 things
         with self.assertRaises(ValueError):
             self.vs.search_lsh(np.ones(self.vs_dim, dtype=np.float32), k=4)
 
     def test_search_empty_store(self):
         query = np.ones(self.vs_dim, dtype=np.float32)
-
-        with self.assertRaises(ValueError):
-            self.vs.search(query, k=1)
+        self.assertEqual(self.vs.search(query, k=1), [[]])
 
     def test_search_lsh_empty_store(self):
         query = np.ones(self.vs_dim, dtype=np.float32)
-
-        with self.assertRaises(ValueError):
-            self.vs.search_lsh(query, k=1)
+        self.assertEqual(self.vs.search_lsh(query, k=1), [[]])
 
     # ------------------------------------------------------------------
     # ID behavior
@@ -681,7 +677,6 @@ class TestVectorStoreAdditional(TestCase):
 
         self.vs.delete([1])
 
-        # This is intended behavior.
         self.assertEqual(
             len(self.vs.lsh_idx),
             2,
@@ -692,13 +687,7 @@ class TestVectorStoreAdditional(TestCase):
             [0, 2],
         )
 
-        with self.vs.connect() as con:
-            rows = con.execute("SELECT vec_id FROM lsh_idx ORDER BY vec_id").fetchall()
-
-        self.assertEqual(
-            [r["vec_id"] for r in rows],
-            [0, 2],
-        )
+        self.assert_indexes_consistent()
 
     def test_lsh_search_after_delete_with_id_hole(self):
         """

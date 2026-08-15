@@ -11,15 +11,22 @@ from vector_db_at_home import VectorStore
 
 class TestVectorStoreAdditional(TestCase):
     def setUp(self):
+        # always wipe the database, even if the integrity check fails in tearDown()
+        self.addCleanup(self.cleanup_database)
+
         self.vs_path = "tmp_vector_test.sqlite3"
         self.vs_dim = 10
         self.vs = VectorStore(self.vs_path, self.vs_dim)
         self.assertEqual(self.vs.count(), 0)
+        self.assert_indexes_consistent()
 
     def tearDown(self):
+        super().tearDown()
+        self.assert_indexes_consistent()
+
+    def cleanup_database(self):
         if os.path.exists(self.vs_path):
             os.remove(self.vs_path)
-        super().tearDown()
 
     def assertNumpyEqual(self, a, b):
         self.assertTrue(np.array_equal(a, b))

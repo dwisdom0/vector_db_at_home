@@ -390,11 +390,10 @@ class VectorStore:
         for q_vec in q_vecs:
             distances = np.linalg.norm(universe["vec"] - q_vec, ord=2, axis=1)
             search_distances.append(np.sort(distances)[:k])
-            # these ids have nothing to do with our real ids
-            # they're just a 0-based enumeration of our current self.index items
-            # so we have to go get the real ids from self.index
-            result_ids = np.argsort(distances)[:k]
-            search_ids.append(self.index[result_ids]["id"])
+            # these ids have nothing to do with self.index["id"]
+            # they're just a 0-based enumeration of the universe we were called with
+            # so the caller will have to convert them
+            search_ids.append(np.argsort(distances)[:k])
 
         search_ids = np.array(search_ids)
         search_distances = np.array(search_distances)
@@ -408,6 +407,9 @@ class VectorStore:
             return [[]]
 
         search_ids, search_distances = self.sort_universe(self.index, queries, k)
+        # convert from 0-based index into self.index["id"]
+        search_ids = self.index[search_ids]["id"]
+
 
         # it's possible that the same result could show up multiple times
         # if there are multiple query vectors
@@ -472,13 +474,27 @@ class VectorStore:
                 (self.lsh_idx["hash"] == q_digest).all(axis=1)
             ]["vec_id"]
 
+            if len(search_space_vec_ids) == 0:
+                search_ids.append(np.array([]))
+                search_distances.append(np.array([]))
+                continue
+
             # have to go get the actual vectors from the main index
             # so we can sort them by distance
             search_space = self.index[np.isin(self.index["id"], search_space_vec_ids)]
+            if len(search_space) == 0:
+                search_ids.append(np.array([]))
+                search_distances.append(np.array([]))
+                continue
 
             search_ids_loop, search_distances_loop = self.sort_universe(
                 search_space, q_vec, k
             )
+            # convert the 0-based index of the univere we passed
+            # into self.index["id"] values
+            search_ids_loop = search_space[search_ids_loop]["id"]
+
+
             # the thing that we get back from sort_universe is already 2d
             # so we have to use extend()
             # otherwise we end up with a 3d thing with an extra unused dimension

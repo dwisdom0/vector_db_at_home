@@ -636,11 +636,20 @@ class TestVectorStore(TestCase):
 
         self.assertEqual(self.vs.count(), 2)
 
+    def test_delete_negative_id(self):
+        self.vs.insert(np.ones((2, self.vs_dim), dtype=np.float32))
+
+        with self.assertWarns(UserWarning):
+            self.vs.delete([-1])
+
+        self.assertEqual(self.vs.count(), 2)
+
+
     def test_delete_nonexistent_ids(self):
         self.vs.insert(np.ones((2, self.vs_dim), dtype=np.float32))
 
         with self.assertWarns(UserWarning):
-            self.vs.delete([0, 99])
+            self.vs.delete([99, 100])
 
         self.assertEqual(self.vs.count(), 2)
 

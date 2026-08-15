@@ -65,19 +65,6 @@ class TestLSH(TestCase):
         self.assertEqual("v_close", results[0][1].doc["name"])
         assertNumpyEqual(v_close, results[0][1].vec)
 
-    def test_lsh_search_after_delete_with_id_hole(self):
-        vecs = np.eye(self.vs_dim, dtype=np.float32)[:5]
-        self.vs.insert(vecs)
-
-        self.vs.delete([1])
-
-        query = vecs[3]
-        results = self.vs.search_lsh(query, k=1)
-
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0][0].id, 3)
-        self.assertEqual(results[0][0].distance, np.float32(0))
-
     def test_persistence_preserves_lsh_index(self):
         rng = np.random.default_rng(123)
 

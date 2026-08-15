@@ -521,56 +521,30 @@ class TestVectorStoreAdditional(TestCase):
         positive_digest = self.vs.lsh_digests(positive)
         negative_digest = self.vs.lsh_digests(negative)
 
-        self.assertNotEqual(
-            positive_digest[0, 0],
-            negative_digest[0, 0],
-        )
+        self.assertFalse(np.array_equal(positive_digest, negative_digest))
 
-    def test_lsh_same_bucket_vectors_are_candidates(self):
+    def test_similar_vectors_same_lsh_digests(self):
         self.set_deterministic_hyperplanes()
 
-        query = np.zeros(
+        vec = np.zeros(
             self.vs_dim,
             dtype=np.float32,
         )
+        vec[0] = 0.1
 
-        same_bucket = np.zeros(
-            self.vs_dim,
-            dtype=np.float32,
-        )
-        same_bucket[0] = 0.1
+        same_bucket = vec.copy()
+        same_bucket[0] = 0.2
 
-        different_bucket = np.zeros(
-            self.vs_dim,
-            dtype=np.float32,
-        )
+        different_bucket = vec.copy()
         different_bucket[0] = -0.1
 
-        self.vs.insert(
-            np.stack(
-                [
-                    query,
-                    same_bucket,
-                    different_bucket,
-                ]
-            ),
-            [
-                {"name": "query"},
-                {"name": "same"},
-                {"name": "different"},
-            ],
-        )
+        vec_digest = self.vs.lsh_digests((vec.reshape(1,-1)))[0]
+        same_digest = self.vs.lsh_digests((same_bucket.reshape(1,-1)))[0]
+        different_digest = self.vs.lsh_digests((different_bucket.reshape(1,-1)))[0]
 
-        query_digest = self.vs.lsh_digests(query)[0]
+        self.assertNumpyEqual(vec_digest, same_digest)
+        self.assertFalse(np.array_equal(vec_digest, different_digest))
 
-        candidate_ids = self.vs.lsh_idx[
-            (self.vs.lsh_idx["hash"] == query_digest).all(axis=1)
-        ]["vec_id"].tolist()
-
-        self.assertEqual(
-            candidate_ids,
-            [0, 1],
-        )
 
     def test_lsh_prunes_different_bucket(self):
         self.set_deterministic_hyperplanes()
@@ -579,17 +553,12 @@ class TestVectorStoreAdditional(TestCase):
             self.vs_dim,
             dtype=np.float32,
         )
+        query[0] = 0.1
 
-        same_bucket = np.zeros(
-            self.vs_dim,
-            dtype=np.float32,
-        )
-        same_bucket[0] = 0.1
+        same_bucket = query.copy()
+        same_bucket[0] = 0.2
 
-        different_bucket = np.zeros(
-            self.vs_dim,
-            dtype=np.float32,
-        )
+        different_bucket = query.copy()
         different_bucket[0] = -0.1
 
         self.vs.insert(

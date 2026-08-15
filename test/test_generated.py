@@ -629,6 +629,8 @@ class TestVectorStoreAdditional(TestCase):
             self.vs_dim,
             dtype=np.float32,
         )
+        query[0] = 0.5
+
 
         v1 = query.copy()
         v1[0] = 0.3
@@ -648,12 +650,12 @@ class TestVectorStoreAdditional(TestCase):
 
         self.assertEqual(
             [r.id for r in results],
-            [1, 2, 0],
+            [0, 2, 1],
         )
 
         np.testing.assert_allclose(
             [r.distance for r in results],
-            [0.1, 0.2, 0.3],
+            sorted([0.5-0.1, 0.5-0.2, 0.5-0.3]),
             rtol=1e-6,
             atol=1e-6,
         )

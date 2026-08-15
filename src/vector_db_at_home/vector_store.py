@@ -410,7 +410,6 @@ class VectorStore:
         # convert from 0-based index into self.index["id"]
         search_ids = self.index[search_ids]["id"]
 
-
         # it's possible that the same result could show up multiple times
         # if there are multiple query vectors
         # but we only want to get each result from the db once
@@ -493,7 +492,6 @@ class VectorStore:
             # convert the 0-based index of the univere we passed
             # into self.index["id"] values
             search_ids_loop = search_space[search_ids_loop]["id"]
-
 
             # the thing that we get back from sort_universe is already 2d
             # so we have to use extend()

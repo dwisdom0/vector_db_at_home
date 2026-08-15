@@ -538,13 +538,12 @@ class TestVectorStoreAdditional(TestCase):
         different_bucket = vec.copy()
         different_bucket[0] = -0.1
 
-        vec_digest = self.vs.lsh_digests((vec.reshape(1,-1)))[0]
-        same_digest = self.vs.lsh_digests((same_bucket.reshape(1,-1)))[0]
-        different_digest = self.vs.lsh_digests((different_bucket.reshape(1,-1)))[0]
+        vec_digest = self.vs.lsh_digests(vec.reshape(1, -1))[0]
+        same_digest = self.vs.lsh_digests(same_bucket.reshape(1, -1))[0]
+        different_digest = self.vs.lsh_digests(different_bucket.reshape(1, -1))[0]
 
         self.assertNumpyEqual(vec_digest, same_digest)
         self.assertFalse(np.array_equal(vec_digest, different_digest))
-
 
     def test_lsh_prunes_different_bucket(self):
         self.set_deterministic_hyperplanes()
@@ -600,7 +599,6 @@ class TestVectorStoreAdditional(TestCase):
         )
         query[0] = 0.5
 
-
         v1 = query.copy()
         v1[0] = 0.3
 
@@ -624,7 +622,7 @@ class TestVectorStoreAdditional(TestCase):
 
         np.testing.assert_allclose(
             [r.distance for r in results],
-            sorted([0.5-0.1, 0.5-0.2, 0.5-0.3]),
+            sorted([0.5 - 0.1, 0.5 - 0.2, 0.5 - 0.3]),
             rtol=1e-6,
             atol=1e-6,
         )

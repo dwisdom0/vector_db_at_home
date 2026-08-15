@@ -644,7 +644,6 @@ class TestVectorStore(TestCase):
 
         self.assertEqual(self.vs.count(), 2)
 
-
     def test_delete_nonexistent_ids(self):
         self.vs.insert(np.ones((2, self.vs_dim), dtype=np.float32))
 

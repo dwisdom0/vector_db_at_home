@@ -378,10 +378,8 @@ class VectorStore:
         if universe is None or len(universe) == 0:
             return np.array([]), np.array([])
 
-        if k > len(self.index):
-            raise ValueError(
-                f"Asked for {k} results but there are only {len(universe)} vectors in the universe"
-            )
+        k = min(k, len(universe))
+
         q_vecs = self.row_vecs(queries, self.dim, self.vec_dtype)
 
         # TODO: vectorize this loop
@@ -564,9 +562,7 @@ class VectorStore:
         self, query_docs: list[str | dict], k: int
     ) -> list[list[SearchRecord]]:
         if k <= 0:
-            raise ValueError(
-                "k, the number of search results for each query, must be a positive integer."
-            )
+            return [[]]
 
         query_docs = [
             self.json_dump(qd) if isinstance(qd, dict) else str(qd) for qd in query_docs

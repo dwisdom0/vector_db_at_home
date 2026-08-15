@@ -83,10 +83,9 @@ class TestVectorStoreAdditional(TestCase):
 
     def test_search_k_too_large(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        # TODO: this isn't a value error, we just return 3 things
-        with self.assertRaises(ValueError):
-            self.vs.search(np.ones(self.vs_dim, dtype=np.float32), k=4)
+        result = self.vs.search(np.ones(self.vs_dim, dtype=np.float32), k=4)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 3)
 
     def test_search_lsh_k_zero(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
@@ -100,10 +99,9 @@ class TestVectorStoreAdditional(TestCase):
 
     def test_search_lsh_k_too_large(self):
         self.vs.insert(np.ones((3, self.vs_dim), dtype=np.float32))
-
-        # TODO: this isn't a value error, we just return 3 things
-        with self.assertRaises(ValueError):
-            self.vs.search_lsh(np.ones(self.vs_dim, dtype=np.float32), k=4)
+        result = self.vs.search_lsh(np.ones(self.vs_dim, dtype=np.float32), k=4)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 3)
 
     def test_search_empty_store(self):
         query = np.ones(self.vs_dim, dtype=np.float32)

@@ -398,7 +398,7 @@ class TestVectorStore(TestCase):
         # delete more than SQLITE_MAX_VARIABLE_NUMBER
         with self.vs.connect() as con:
             rows = con.execute("pragma compile_options;").fetchall()
-            opts = [r["compile_options"] for r in rows]
+        opts = [r["compile_options"] for r in rows]
         opt_name = "MAX_VARIABLE_NUMBER="
         max_vars = None
         for opt in opts:
@@ -587,8 +587,8 @@ class TestVectorStore(TestCase):
         docs = gen_docs(list(range(size)))
         self.vs.insert(a, docs)
 
-        with self.assertRaises(ValueError):
-            _ = self.vs.search_by_doc([{"1": "1"}], k=0)
+        result = self.vs.search_by_doc([{"1": "1"}], k=0)
+        self.assertEqual(result, [[]])
 
     def test_search_by_doc_too_many_results(self):
         size = 5

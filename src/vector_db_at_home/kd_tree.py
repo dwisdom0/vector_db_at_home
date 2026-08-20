@@ -1,4 +1,4 @@
-from collections.abc import Collection
+import numpy as np
 
 # I found something that says this doesn't work
 # above about 20 dimensions
@@ -53,14 +53,46 @@ from collections.abc import Collection
 
 
 class KDTreeNode:
-    def __init__(self, split_dim: int, split_val: int, points: Collection):
+    def __init__(self, split_dim: int | None, split_val: int | None, points: list):
         self.split_dim = split_dim
         self.split_val = split_val
         self.points = points
-        self.l = None
-        self.r = None
+        self.l: KDTreeNode = None
+        self.r: KDTreeNode = None
 
 
 class KDTree:
-    def __init__(self, k: int):
+    def __init__(self, k: int, max_points_leaf: int = 10):
         self.k = k
+        self.max_points_leaf = max_points_leaf
+        self.root = KDTreeNode(None, None, [])
+
+    def insert_rec(self, root: KDTreeNode, point: np.ndarray):
+        # if the node doesn't have split_dim/split_val or points,
+        # this is the first point we're inserting
+        if root.split_dim is None and root.split_val is None and len(root.points) == 0:
+            return KDTreeNode(None, None, [point])
+
+        # if we've hit something that has points,
+        # check whether inserting would increase us above max_points_leaf
+        # and then split on the median of the dimension with the largest range
+        # or idk maybe split on max - (max - min)/2
+        # and replace the current node with a splitting node
+        # and two leaf nodes
+        if len(root.points) > 0:
+            if len(root.points) < self.max_points_leaf:
+                root.points.append(point)
+                return root
+
+            # TODO: split and add two leaf nodes
+            return
+
+        # if the root has no points,
+        # search down based on split_dim and split_val
+        val = point[root.split_dim]
+        if val <= root.split_val:
+            return self.insert_rec(root.l, point)
+        return self.insert_rec(root.r, point)
+
+    def insert(self, point: np.ndarray):
+        self.root = self.insert_rec(self.root, point)
